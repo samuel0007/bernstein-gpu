@@ -19,6 +19,7 @@ mesh = Mesh(coord_element)
 
 # Function Space
 e = element("Lagrange", "triangle", 2, lagrange_variant=LagrangeVariant.bernstein)
+# e = element("Lagrange", "triangle", 1)
 V = FunctionSpace(mesh, e)
 
 # Trial and test functions
