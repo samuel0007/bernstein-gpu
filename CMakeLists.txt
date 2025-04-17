@@ -88,6 +88,7 @@ function(add_example name)
   set(pyfile ${example_dir}/${name}.py)
   set(cfile ${CMAKE_CURRENT_BINARY_DIR}/${name}.c)
 
+
   add_custom_command(
     OUTPUT ${cfile}
     COMMAND ffcx ${pyfile} ${SCALAR_TYPE}
@@ -98,6 +99,11 @@ function(add_example name)
 
   add_executable(${name} ${example_dir}/main.cpp ${cfile})
   target_link_libraries(${name} PRIVATE dolfinx bernsteinlib)
+
+  target_compile_definitions(${name}
+    PRIVATE
+      DATA_DIR="${example_dir}"
+  )
 
   if(amd)
     target_compile_definitions(${name} PRIVATE USE_HIP=1)
@@ -114,3 +120,16 @@ endfunction()
 
 add_example(mat_free_mass)
 add_example(mass_cg)
+add_example(planar_wave)
+
+
+# Do not throw error for 'multi-line comments' (these are typical in rst which
+# includes LaTeX)
+# include(CheckCXXCompilerFlag)
+# check_cxx_compiler_flag("-Wno-comment" HAVE_NO_MULTLINE)
+# set_source_files_properties(
+#   main.cpp
+#   PROPERTIES
+#     COMPILE_FLAGS
+#     "$<$<BOOL:${HAVE_NO_MULTLINE}>:-Wno-comment -Wall -Wextra -pedantic -Werror>"
+# )
