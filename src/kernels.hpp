@@ -8,15 +8,18 @@ template <typename T, int Q> __constant__ T qwts1_d[Q];
 
 template <typename T, int Q> __constant__ T qpts1_d[Q];
 
+/// Apply mass matrix operator \int alpha(x) * inner(u, v) dx to in_dofs.
 /// @param in_dofs input global dofs (x),   size ndofs
 /// @param out_dofs output global dofs (y), size ndofs
-/// @param detJ_cells det(J_K(eta_q)),      size ncells
+/// @param alpha_cells DG0 alpha,           size ncells
+/// @param detJ_cells det(J_K(dzeta_q)),    size Q * Q * ncells 
 /// @param dofmap global to local dofmap,   size K * ncells
 /// @param N number of dofs on 1D interval
 /// @param Q number of quadrature points on 1D interval
 template <typename T, int N, int Q>
-__launch_bounds__(Q *Q) __global__
+__launch_bounds__(Q * Q) __global__
     void mass_operator(const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
+                       const T *__restrict__ alpha_cells,
                        const T *__restrict__ detJ_cells,
                        const std::int32_t *__restrict__ dofmap) {
   auto triangle_ij = [](auto i, auto j) {
@@ -31,12 +34,13 @@ __launch_bounds__(Q *Q) __global__
   constexpr int K = (N + 1) * N / 2; // Number of dofs on triangle
 
   constexpr int dof_reordering[6] = {
-    2, 3, 4, 1, 5, 0
-  }; // TODO: compute reordering for any order
+      2, 3, 4, 1, 5, 0}; // TODO: compute reordering for any order
 
-  const int l_dof_idx = dof_reordering[triangle_ij(ty, tx)]; // Only valid for tx < N - ty
+  const int l_dof_idx =
+      dof_reordering[triangle_ij(ty, tx)]; // Only valid for tx < N - ty
   int g_dof_idx = -1;
 
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
 
   // if(tx == 0) {
   //     for (int i = 0; i < Q; ++i) {
@@ -63,7 +67,6 @@ __launch_bounds__(Q *Q) __global__
     // printf("in_local_dofs[%d][%d] = %f\n", ty, tx, in_local_dofs[ty][tx]);
   }
   __syncthreads();
-
 
   // 1. Evaluate u(x_q) (dofs -> qvals)
   T p = qpts0_d<T, Q>[tx];
@@ -100,7 +103,7 @@ __launch_bounds__(Q *Q) __global__
   }
 
   // 2. Apply geometry
-  qvals[tx][ty] = qval * detJ_abs;
+  qvals[tx][ty] = alpha * qval * detJ_abs;
   // printf("qvals[%d, %d]=%f\n", tx, ty, qvals[tx][ty]);
   __syncthreads();
 
@@ -112,8 +115,8 @@ __launch_bounds__(Q *Q) __global__
   // ty = i2
   if (tx < N) {
     for (int i1 = 0; i1 < Q; ++i1) {
-      T w = qwts1_d<T,Q>[i1];
-      T p = qpts1_d<T,Q>[i1];
+      T w = qwts1_d<T, Q>[i1];
+      T p = qpts1_d<T, Q>[i1];
 
       T s = 1.0 - p;
       T r = p / s;
@@ -139,8 +142,8 @@ __launch_bounds__(Q *Q) __global__
   T f2val = 0.;
   if (tx < N && ty < N - tx) {
     for (int i2 = 0; i2 < Q; ++i2) {
-      T w = qwts0_d<T,Q>[i2];
-      T p = qpts0_d<T,Q>[i2];
+      T w = qwts0_d<T, Q>[i2];
+      T p = qpts0_d<T, Q>[i2];
       T s = 1.0 - p;
       T r = p / s;
       for (int i = 0; i < N - 1 - tx; ++i) {

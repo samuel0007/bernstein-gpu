@@ -184,7 +184,9 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
   // ----------- 3. GPU Matrix Free setup -----------
   DeviceVector b_d(map, map_bs);
   b_d.copy_from_host(b);
-  acc::MatFreeMass<U, polynomial_degree, quadrature_points> gpu_action(mesh, V);
+  la::Vector<T> alpha(map, map_bs);
+  alpha.set(1.0);
+  acc::MatFreeMass<U, polynomial_degree, quadrature_points> gpu_action(mesh, V, alpha.array());
 
   // ----------- 4. CG -----------
   int max_iters = 200;

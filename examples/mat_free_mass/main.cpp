@@ -65,13 +65,25 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
       basix::element::family::P, basix::cell::type::triangle, polynomial_degree,
       basix::element::lagrange_variant::bernstein,
       basix::element::dpc_variant::unset, false);
+  
+  auto element_DG = basix::create_element<U>(
+      basix::element::family::P, basix::cell::type::triangle, 0,
+      basix::element::lagrange_variant::unset,
+      basix::element::dpc_variant::unset, true);
+
   auto V = std::make_shared<fem::FunctionSpace<U>>(
       fem::create_functionspace(mesh, element, {}));
 
+  auto V_DG = std::make_shared<fem::FunctionSpace<U>>(
+      fem::create_functionspace(mesh, element_DG, {}));
+  
+  auto alpha = std::make_shared<fem::Function<T>>(V_DG);
+  alpha->x()->set(0.5);
+  
   // Action of the bilinear form "a" on a function ui
   auto ui = std::make_shared<fem::Function<T, U>>(V);
   auto M = std::make_shared<fem::Form<T, U>>(
-      fem::create_form<T>(*form_mat_free_mass_M, {V}, {{"ui", ui}}, {{}}, {}, {}));
+      fem::create_form<T>(*form_mat_free_mass_M, {V}, {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
 
   // ----------- 2. CPU Matrix Free setup -----------
   auto coeff = fem::allocate_coefficient_storage(*M);
@@ -97,7 +109,7 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
   };
 
   // ----------- 3. GPU Matrix Free setup -----------
-  acc::MatFreeMass<U, polynomial_degree, quadrature_points>gpu_action(mesh, V);
+  acc::MatFreeMass<U, polynomial_degree, quadrature_points>gpu_action(mesh, V, alpha->x()->array());
 
   // ----------- 4. Matrix Free apply -----------
 

@@ -11,22 +11,27 @@ from ufl import (
     dx,
     inner,
 )
+import basix
 
 coord_element = element("Lagrange", "triangle", 1, lagrange_variant=LagrangeVariant.bernstein, shape=(2,))
 mesh = Mesh(coord_element)
 
 # Function Space
 e = element("Lagrange", "triangle", 2, lagrange_variant=LagrangeVariant.bernstein)
+e_DG = element("Lagrange", "triangle", 0, discontinuous=True)
+
 V = FunctionSpace(mesh, e)
+V_DG = FunctionSpace(mesh, e_DG)
 
 # Trial and test functions
 u = TrialFunction(V)
 v = TestFunction(V)
 
+alpha = Coefficient(V_DG)
+
 # Bilinear and linear forms according to the variational
 # formulation of the equations:
-a = inner(u, v) * dx
-
+a = alpha * inner(u, v) * dx
 
 # Linear form representing the action of the form `a`` on the
 # coefficient `ui`:`

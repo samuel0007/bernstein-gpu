@@ -15,7 +15,8 @@ public:
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
   MatFreeMass(std::shared_ptr<mesh::Mesh<T>> mesh,
-              std::shared_ptr<fem::FunctionSpace<T>> V)
+              std::shared_ptr<fem::FunctionSpace<T>> V,
+              std::span<const T> alpha)
       : mesh(mesh), V(V) {
 
     // auto [lcells, bcells] = compute_boundary_cells(V);
@@ -37,6 +38,15 @@ public:
 
     std::cout << std::format("Sent dofmap to GPU (size = {} bytes)",
                              dofmap_d.size() * sizeof(std::int32_t))
+              << std::endl;
+    
+    this->alpha_d.resize(alpha.size());
+    thrust::copy(alpha.begin(), alpha.end(), this->alpha_d.begin());
+    this->alpha_d_span = std::span<const T>(
+      thrust::raw_pointer_cast(alpha_d.data()), alpha_d.size());
+
+    std::cout << std::format("Sent alpha to GPU (size = {} bytes)",
+                              alpha_d.size() * sizeof(T))
               << std::endl;
 
     // Construct quadrature points table
@@ -86,7 +96,9 @@ public:
     assert(detJ_geom_d_span.size() == this->number_of_local_cells * Q * Q);
 
     mass_operator<T, N, Q><<<grid_size, block_size>>>(
-        in_dofs, out_dofs, this->detJ_geom_d_span.data(),
+        in_dofs, out_dofs,
+        this->alpha_d_span.data(),
+        this->detJ_geom_d_span.data(),
         this->dofmap_d_span.data());
     check_device_last_error();
   }
@@ -103,6 +115,10 @@ private:
 
   std::shared_ptr<mesh::Mesh<T>> mesh;
   std::shared_ptr<fem::FunctionSpace<T>> V;
+  std::span<const T> alpha;
+
+  thrust::device_vector<T> alpha_d;
+  std::span<const T> alpha_d_span;
 
   thrust::device_vector<T> detJ_geom_d;
   std::span<const T> detJ_geom_d_span;
