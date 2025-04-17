@@ -71,8 +71,11 @@ public:
   }
 
   template <typename Vector> void operator()(const Vector &in, Vector &out) {
+    out.set(T{0.0});
+    
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
+
     dim3 grid_size(this->number_of_local_cells);
     dim3 block_size(Q, Q);
     constexpr int N = P + 1;
@@ -86,6 +89,12 @@ public:
         in_dofs, out_dofs, this->detJ_geom_d_span.data(),
         this->dofmap_d_span.data());
     check_device_last_error();
+  }
+
+  template <typename Vector>
+  void get_diag_inverse(Vector& diag_inv)
+  {
+    assert(false && "todo for jacobi preconditioning of cg");
   }
 
 private:

@@ -113,15 +113,4 @@ function(add_example name)
 endfunction()
 
 add_example(mat_free_mass)
-
-
-# Do not throw error for 'multi-line comments' (these are typical in rst which
-# includes LaTeX)
-# include(CheckCXXCompilerFlag)
-# check_cxx_compiler_flag("-Wno-comment" HAVE_NO_MULTLINE)
-# set_source_files_properties(
-#   main.cpp
-#   PROPERTIES
-#     COMPILE_FLAGS
-#     "$<$<BOOL:${HAVE_NO_MULTLINE}>:-Wno-comment -Wall -Wextra -pedantic -Werror>"
-# )
+add_example(mass_cg)
