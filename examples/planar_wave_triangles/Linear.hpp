@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "planar_wave.h"
+#include "planar_wave_triangles.h"
 
 #include <fstream>
 #include <memory>
@@ -13,6 +13,9 @@
 #include <dolfinx.h>
 #include <dolfinx/geometry/utils.h>
 #include <dolfinx/la/Vector.h>
+#include <dolfinx/fem/petsc.h>
+#include "petscksp.h" 
+
 
 using namespace dolfinx;
 
@@ -132,12 +135,30 @@ public:
 
     // Define LHS form (linear)
     a = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_a, {V}, {{"u", u}, {"c0", c0}, {"rho0", rho0}}, {},
-        {}, {}));
+        *form_planar_wave_triangles_a_M, {V, V},
+        {{"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
 
-    a_test = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_a, {V}, {{"u", ui}, {"c0", c0}, {"rho0", rho0}}, {},
-        {}, {}));
+    auto A = la::petsc::Matrix(fem::petsc::create_matrix(*a), false);
+    MatZeroEntries(A.mat());
+    fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A.mat(), ADD_VALUES),
+                         *a, {});
+    MatAssemblyBegin(A.mat(), MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(A.mat(), MAT_FINAL_ASSEMBLY);
+
+    // MatNullSpace nsp;
+    // MatNullSpaceCreate(MPI_COMM_WORLD,
+    //                   PETSC_TRUE,   // Constant Nullspace (Pure NBc problem, imposes 0 mean)
+    //                   0,            
+    //                   0,           
+    //                   &nsp);
+
+    // MatSetNullSpace(A.mat(), nsp);
+
+    la::petsc::options::set("ksp_type", "gmres");
+    la::petsc::options::set("pc_type", "jacobi");
+
+    lu.set_from_options();
+    lu.set_operator(A.mat());
 
     m = std::make_shared<la::Vector<T>>(index_map, bs);
     m_ = m->mutable_array();
@@ -147,49 +168,16 @@ public:
 
     // Define RHS form
     L = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_L, {V},
+        *form_planar_wave_triangles_L, {V},
         {{"g", g}, {"u_n", u_n}, {"v_n", v_n}, {"c0", c0}, {"rho0", rho0}}, {},
         fd_view, {}, {}));
 
     b = std::make_shared<la::Vector<T>>(index_map, bs);
     b_ = b->mutable_array();
 
-    coeff = fem::allocate_coefficient_storage(*a_test);
-    constants = fem::pack_constants(*a_test);
+    coeff = fem::allocate_coefficient_storage(*a);
+    constants = fem::pack_constants(*a);
 
-    // Create function for computing the action of A on x (y = Ax)
-    action = [this](auto &x, auto &y) {
-      y.set(0.0);
-
-      // Update coefficient ui (just copy data from x to ui)
-      std::ranges::copy(x.array(), this->ui->x()->mutable_array().begin());
-
-      // Compute action of A on x
-      fem::pack_coefficients(*a_test, coeff);
-      fem::assemble_vector(y.mutable_array(), *a_test,
-                           std::span<const T>(constants),
-                           fem::make_coefficients_span(coeff));
-
-      // // Accumulate ghost values
-      // y.scatter_rev(std::plus<T>());
-
-      // // Update ghost values
-      // y.scatter_fwd();
-    };
-
-    // M = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-    //     *form_planar_wave_M, {V}, {{"ui", ui}, {"c0", c0}, {"rho0", rho0}},
-    //     {{}}, {}, {}));
-
-    // auto mtest = std::make_shared<la::Vector<T>>(index_map, bs);
-    // auto mtest_ = mtest->mutable_array();
-    // std::fill(mtest_.begin(), mtest_.end(), 0.0);
-    // fem::assemble_vector(mtest_, *a);
-
-    // for(int i = 0; i < mtest_.size(); ++i) {
-    //   std::cout << mtest_[i] << " " << m_[i] << "\n";
-    // }
-  }
 
   /// Set the initial values of u and v, i.e. u_0 and v_0
   void init() {
@@ -241,29 +229,16 @@ public:
     fem::assemble_vector(b_, *L);
     b->scatter_rev(std::plus<T>());
 
-    // Solve
-    // TODO: Divide is more expensive than multiply.
-    // We should store the result of 1/m in a vector and apply and element wise
-    // vector multiplication, since m doesn't change for linear wave
-    // propagation.
-
-    // {
-    //   out = result->mutable_array();
-    //   _b = b->array();
-    //   _m = m->array();
-
-    //   // Element wise division
-    //   // out[i] = b[i]/m[i]
-    //   std::transform(_b.begin(), _b.end(), _m.begin(), out.begin(),
-    //                  [](const T &bi, const T &mi) { return bi / mi; });
-    // }
-
-    // la::Vector<T> test_result(*result);
-    // test_result.set(0.);
-    // _b = b->array();
-
-    int its = linalg::cg(*result, *b, action, 100, 1e-6);
-    std::cout << "cg its=" << its << std::endl;
+    {
+      la::petsc::Vector _u(la::petsc::create_vector_wrap(*result), false);
+      la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
+      lu.solve(_u.vec(), _b.vec());
+      auto ksp = lu.ksp();
+      KSPConvergedReason reason;
+      KSPGetConvergedReason(ksp, &reason);
+      if (reason < 0)
+        std::cerr << "KSP Failure: reason " << reason << "\n";
+    }
   }
 
   /// Runge-Kutta 4th order solver
@@ -378,7 +353,7 @@ private:
   std::shared_ptr<const common::IndexMap> index_map;
   std::shared_ptr<fem::FunctionSpace<T>> V;
   std::shared_ptr<fem::Function<T>> u, u_n, v_n, g, c0, rho0, ui;
-  std::shared_ptr<fem::Form<T>> a, L, a_test;
+  std::shared_ptr<fem::Form<T>> a, L;
   std::shared_ptr<la::Vector<T>> m, b;
 
   std::function<void(const la::Vector<T> &, la::Vector<T> &)> action;
@@ -389,6 +364,8 @@ private:
 
   std::span<T> g_, m_, b_, out;
   std::span<const T> _m, _b;
+
+  la::petsc::KrylovSolver lu{MPI_COMM_WORLD};
 };
 
 // Note:

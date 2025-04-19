@@ -37,21 +37,21 @@ int main(int argc, char* argv[]) {
     const T density = 1000;      // (kg/m^3)
 
     // Domain parameters
-    const T domainLength = 0.05; // (m)
+    const T domainLength = 0.12; // (m)
 
     // FE parameters
     const int degreeOfBasis = 2;
 
     // Read mesh and mesh tags
-    auto coord_element = fem::CoordinateElement<T>(mesh::CellType::quadrilateral, 1);
+    auto coord_element = fem::CoordinateElement<T>(mesh::CellType::triangle, 1);
     io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR)+"/mesh.xdmf", "r");
     auto mesh = std::make_shared<mesh::Mesh<T>>(
-        fmesh.read_mesh(coord_element, mesh::GhostMode::none, "planewave_2d_1"));
+        fmesh.read_mesh(coord_element, mesh::GhostMode::none, "planewave_2d_1_t"));
     mesh->topology()->create_connectivity(1, 2);
     auto mt_cell = std::make_shared<mesh::MeshTags<std::int32_t>>(
-        fmesh.read_meshtags(*mesh, "planewave_2d_1_cells"));
+        fmesh.read_meshtags(*mesh, "planewave_2d_1_t_cells"));
     auto mt_facet = std::make_shared<mesh::MeshTags<std::int32_t>>(
-        fmesh.read_meshtags(*mesh, "planewave_2d_1_facets"));
+        fmesh.read_meshtags(*mesh, "planewave_2d_1_t_facets"));
 
     // Mesh parameters
     const int tdim = mesh->topology()->dim();
@@ -69,15 +69,15 @@ int main(int argc, char* argv[]) {
 
     // Finite element
     basix::FiniteElement element = basix::create_element<T>(
-      basix::element::family::P, basix::cell::type::quadrilateral, degreeOfBasis,
-      basix::element::lagrange_variant::gll_warped,
+      basix::element::family::P, basix::cell::type::triangle, degreeOfBasis,
+      basix::element::lagrange_variant::unset,
       basix::element::dpc_variant::unset, false
     );
 
     // Define DG function space for the physical parameters of the domain
     basix::FiniteElement element_DG = basix::create_element<T>(
-      basix::element::family::P, basix::cell::type::quadrilateral, 0,
-      basix::element::lagrange_variant::gll_warped,
+      basix::element::family::P, basix::cell::type::triangle, 0,
+      basix::element::lagrange_variant::unset,
       basix::element::dpc_variant::unset, true
     );
     auto V_DG = std::make_shared<fem::FunctionSpace<T>>(
@@ -104,7 +104,7 @@ int main(int argc, char* argv[]) {
     timeStepSize = period / stepPerPeriod;
     const T startTime = 0.0;
     // const T finalTime = domainLength / speedOfSound + 4.0 / sourceFrequency;
-    const T finalTime = (domainLength / speedOfSound + 4.0 / sourceFrequency) / 8.;
+    const T finalTime = (domainLength / speedOfSound + 4.0 / sourceFrequency) / 4.;
     const int numberOfStep = (finalTime - startTime) / timeStepSize + 1;
 
     if (mpi_rank == 0) {
@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
 
     // Check norms
     auto Norm = std::make_shared<fem::Form<T>>(
-        fem::create_form<T, T>(*form_planar_wave_Norm, {}, {{"u_n", u_n}}, {}, {}, {}, mesh));
+        fem::create_form<T, T>(*form_planar_wave_triangles_Norm, {}, {{"u_n", u_n}}, {}, {}, {}, mesh));
     T norm = fem::assemble_scalar(*Norm);
 
     if (mpi_rank == 0) {

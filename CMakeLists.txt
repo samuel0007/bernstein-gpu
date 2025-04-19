@@ -49,8 +49,8 @@ if (DEFINED ENV{CRAYPE_VERSION})
    set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -Ofast -march=native -I/opt/cray/pe/mpich/8.1.27/ofi/gnu/9.1/include")
 endif()
 
-# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
 set(VERBOSE)
 
@@ -121,6 +121,7 @@ endfunction()
 add_example(mat_free_mass)
 add_example(mass_cg)
 add_example(planar_wave)
+add_example(planar_wave_triangles)
 
 
 # Do not throw error for 'multi-line comments' (these are typical in rst which
