@@ -5,7 +5,7 @@
 // Copyright (C) 2022 Adeeb Arif Kor
 
 #include "Linear.hpp"
-#include "planar_wave_triangles.h"
+#include "planar_wave_triangles_gpu.h"
 
 #include <cmath>
 #include <dolfinx.h>
@@ -70,7 +70,7 @@ int main(int argc, char* argv[]) {
     // Finite element
     basix::FiniteElement element = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::triangle, degreeOfBasis,
-      basix::element::lagrange_variant::unset,
+      basix::element::lagrange_variant::bernstein,
       basix::element::dpc_variant::unset, false
     );
 
@@ -151,7 +151,7 @@ int main(int argc, char* argv[]) {
 
     // Check norms
     auto Norm = std::make_shared<fem::Form<T>>(
-        fem::create_form<T, T>(*form_planar_wave_triangles_Norm, {}, {{"u_n", u_n}}, {}, {}, {}, mesh));
+        fem::create_form<T, T>(*form_planar_wave_triangles_gpu_Norm, {}, {{"u_n", u_n}}, {}, {}, {}, mesh));
     T norm = fem::assemble_scalar(*Norm);
 
     if (mpi_rank == 0) {

@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "planar_wave_triangles.h"
+#include "planar_wave_triangles_gpu.h"
 
 #include <fstream>
 #include <memory>
@@ -135,7 +135,7 @@ public:
 
     // Define LHS form (bilinear)
     a = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_triangles_a_M, {V, V},
+        *form_planar_wave_triangles_gpu_a_M, {V, V},
         {{"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
 
     auto A = la::petsc::Matrix(fem::petsc::create_matrix(*a), false);
@@ -172,7 +172,7 @@ public:
 
     // Define RHS form
     L = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_triangles_L, {V},
+        *form_planar_wave_triangles_gpu_L, {V},
         {{"g", g}, {"u_n", u_n}, {"v_n", v_n}, {"c0", c0}, {"rho0", rho0}}, {},
         fd_view, {}, {}));
 
@@ -181,7 +181,7 @@ public:
 
     // matrix free
     a_linear = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-      *form_planar_wave_triangles_a, {V}, {{"u", ui}, {"c0", c0}, {"rho0", rho0}}, {},
+      *form_planar_wave_triangles_gpu_a, {V}, {{"u", ui}, {"c0", c0}, {"rho0", rho0}}, {},
       {}, {}));
 
     coeff = fem::allocate_coefficient_storage(*a_linear);
@@ -258,17 +258,17 @@ public:
 
     la::Vector<T> test_result(*result);
 
-    // {
-    //   la::petsc::Vector _u(la::petsc::create_vector_wrap(test_result), false);
-    //   la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
-    //   int its = lu.solve(_u.vec(), _b.vec());
-    //   std::cout << "KSP CG its=" << its << "\n";
-    //   auto ksp = lu.ksp();
-    //   KSPConvergedReason reason;
-    //   KSPGetConvergedReason(ksp, &reason);
-    //   if (reason < 0)
-    //     std::cerr << "KSP Failure: reason " << reason << "\n";
-    // }
+    {
+      la::petsc::Vector _u(la::petsc::create_vector_wrap(test_result), false);
+      la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
+      int its = lu.solve(_u.vec(), _b.vec());
+      std::cout << "KSP CG its=" << its << "\n";
+      auto ksp = lu.ksp();
+      KSPConvergedReason reason;
+      KSPGetConvergedReason(ksp, &reason);
+      if (reason < 0)
+        std::cerr << "KSP Failure: reason " << reason << "\n";
+    }
 
     int its = linalg::cg(*result, *b, action, 100, 1e-6);
     std::cout << "House CG its=" << its << std::endl;

@@ -1,4 +1,4 @@
-"""Test congruence of Bernstein and equispaced Lagrange galerkin matrix for a poisson problem"""
+"""Test congruence of Bernstein and other Lagrange galerkin matrix for a poisson problem"""
 
 import dolfinx
 from mpi4py import MPI
@@ -11,7 +11,7 @@ import basix
 
 bases = [basix.LagrangeVariant.equispaced, basix.LagrangeVariant.bernstein]
 degree = 2
-print(f"Asserting congruence of Bernstein and equispaced Lagrange elements, degree {degree}.")
+print(f"Asserting congruence of Bernstein and other Lagrange elements, degree {degree}.")
 for base in bases:
     print(f"Testing with base: {base}")
     element = basix.ufl.element(
@@ -32,7 +32,8 @@ for base in bases:
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
 
-    a = inner(grad(u), grad(v)) * dx
+    # a = inner(grad(u), grad(v)) * dx
+    a = inner(u, v) * dx
 
     a_form = dolfinx.fem.form(a)
     A = dolfinx.fem.assemble_matrix(a_form)
@@ -49,3 +50,9 @@ for base in bases:
 
     print(f"Rank: {rank}")
     print(f"Signature: ({n_pos} positive, {n_neg} negative, {n_zero} zero)")
+    # Spectrum range and condition number
+    min_val = np.min(vals)
+    max_val = np.max(vals)
+    print(f"Min eigenvalue: {min_val}")
+    print(f"Max eigenvalue: {max_val}")
+    print(f"Condition number: {np.abs(max_val/min_val)}")

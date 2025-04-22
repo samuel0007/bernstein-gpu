@@ -122,6 +122,7 @@ add_example(mat_free_mass)
 add_example(mass_cg)
 add_example(planar_wave)
 add_example(planar_wave_triangles)
+add_example(planar_wave_triangles_gpu)
 
 
 # Do not throw error for 'multi-line comments' (these are typical in rst which
