@@ -155,12 +155,11 @@ public:
     // MatSetNullSpace(A.mat(), nsp);
     
     // la::petsc::options::set("ksp_type", "gmres");
-    la::petsc::options::set("ksp_type", "preonly");
+    // la::petsc::options::set("ksp_type", "preonly");
 
-    // la::petsc::options::set("ksp_type", "cg");
-    // la::petsc::options::set("pc_type", "jacobi");
-    la::petsc::options::set("pc_type", "lu");
-
+    la::petsc::options::set("ksp_type", "cg");
+    la::petsc::options::set("pc_type", "jacobi");
+    // la::petsc::options::set("pc_type", "lu");
 
     lu.set_from_options();
     lu.set_operator(A.mat());
@@ -179,6 +178,33 @@ public:
 
     b = std::make_shared<la::Vector<T>>(index_map, bs);
     b_ = b->mutable_array();
+
+    // matrix free
+    a_linear = std::make_shared<fem::Form<T>>(fem::create_form<T>(
+      *form_planar_wave_triangles_a, {V}, {{"u", ui}, {"c0", c0}, {"rho0", rho0}}, {},
+      {}, {}));
+
+    coeff = fem::allocate_coefficient_storage(*a_linear);
+    constants = fem::pack_constants(*a_linear);
+
+    action = [this](auto &x, auto &y) {
+      y.set(0.0);
+
+      // Update coefficient ui (just copy data from x to ui)
+      std::ranges::copy(x.array(), this->ui->x()->mutable_array().begin());
+
+      // Compute action of A on x
+      fem::pack_coefficients(*a_linear, coeff);
+      fem::assemble_vector(y.mutable_array(), *a_linear,
+                           std::span<const T>(constants),
+                           fem::make_coefficients_span(coeff));
+
+      // // Accumulate ghost values
+      // y.scatter_rev(std::plus<T>());
+
+      // // Update ghost values
+      // y.scatter_fwd();
+    };
   }
   /// Set the initial values of u and v, i.e. u_0 and v_0
   void init() {
@@ -230,17 +256,22 @@ public:
     fem::assemble_vector(b_, *L);
     b->scatter_rev(std::plus<T>());
 
+    la::Vector<T> test_result(*result);
+
     {
-      la::petsc::Vector _u(la::petsc::create_vector_wrap(*result), false);
+      la::petsc::Vector _u(la::petsc::create_vector_wrap(test_result), false);
       la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
       int its = lu.solve(_u.vec(), _b.vec());
-      std::cout << "its=" << its << "\n";
+      std::cout << "KSP CG its=" << its << "\n";
       auto ksp = lu.ksp();
       KSPConvergedReason reason;
       KSPGetConvergedReason(ksp, &reason);
       if (reason < 0)
         std::cerr << "KSP Failure: reason " << reason << "\n";
     }
+
+    int its = linalg::cg(*result, *b, action, 100, 1e-6);
+    std::cout << "House CG its=" << its << std::endl;
   }
 
   /// Runge-Kutta 4th order solver
@@ -355,14 +386,14 @@ private:
   std::shared_ptr<const common::IndexMap> index_map;
   std::shared_ptr<fem::FunctionSpace<T>> V;
   std::shared_ptr<fem::Function<T>> u, u_n, v_n, g, c0, rho0, ui;
-  std::shared_ptr<fem::Form<T>> a, L;
+  std::shared_ptr<fem::Form<T>> a, L, a_linear;
   std::shared_ptr<la::Vector<T>> m, b;
 
-  // std::function<void(const la::Vector<T> &, la::Vector<T> &)> action;
-  // std::map<std::pair<dolfinx::fem::IntegralType, int>,
-  //          std::pair<std::vector<double>, int>>
-  //     coeff;
-  // std::vector<T> constants;
+  std::function<void(const la::Vector<T> &, la::Vector<T> &)> action;
+  std::map<std::pair<dolfinx::fem::IntegralType, int>,
+           std::pair<std::vector<double>, int>>
+      coeff;
+  std::vector<T> constants;
 
   std::span<T> g_, m_, b_, out;
   std::span<const T> _m, _b;
