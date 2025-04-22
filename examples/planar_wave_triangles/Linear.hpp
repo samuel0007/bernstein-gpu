@@ -133,7 +133,7 @@ public:
       }
     }
 
-    // Define LHS form (linear)
+    // Define LHS form (bilinear)
     a = std::make_shared<fem::Form<T>>(fem::create_form<T>(
         *form_planar_wave_triangles_a_M, {V, V},
         {{"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
@@ -145,17 +145,22 @@ public:
     MatAssemblyBegin(A.mat(), MAT_FINAL_ASSEMBLY);
     MatAssemblyEnd(A.mat(), MAT_FINAL_ASSEMBLY);
 
-    // MatNullSpace nsp;
-    // MatNullSpaceCreate(MPI_COMM_WORLD,
-    //                   PETSC_TRUE,   // Constant Nullspace (Pure NBc problem, imposes 0 mean)
-    //                   0,            
-    //                   0,           
-    //                   &nsp);
-
+    MatNullSpace nsp;
+    MatNullSpaceCreate(MPI_COMM_WORLD,
+                      PETSC_TRUE,   // Constant Nullspace (Pure NBc problem, imposes 0 mean)
+                      0,            
+                      0,           
+                      &nsp);
+    MatSetNearNullSpace(A.mat(), nsp);
     // MatSetNullSpace(A.mat(), nsp);
+    
+    // la::petsc::options::set("ksp_type", "gmres");
+    la::petsc::options::set("ksp_type", "preonly");
 
-    la::petsc::options::set("ksp_type", "gmres");
-    la::petsc::options::set("pc_type", "jacobi");
+    // la::petsc::options::set("ksp_type", "cg");
+    // la::petsc::options::set("pc_type", "jacobi");
+    la::petsc::options::set("pc_type", "lu");
+
 
     lu.set_from_options();
     lu.set_operator(A.mat());
@@ -174,11 +179,7 @@ public:
 
     b = std::make_shared<la::Vector<T>>(index_map, bs);
     b_ = b->mutable_array();
-
-    coeff = fem::allocate_coefficient_storage(*a);
-    constants = fem::pack_constants(*a);
-
-
+  }
   /// Set the initial values of u and v, i.e. u_0 and v_0
   void init() {
     u_n->x()->set(0.0);
@@ -232,7 +233,8 @@ public:
     {
       la::petsc::Vector _u(la::petsc::create_vector_wrap(*result), false);
       la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
-      lu.solve(_u.vec(), _b.vec());
+      int its = lu.solve(_u.vec(), _b.vec());
+      std::cout << "its=" << its << "\n";
       auto ksp = lu.ksp();
       KSPConvergedReason reason;
       KSPGetConvergedReason(ksp, &reason);
@@ -356,11 +358,11 @@ private:
   std::shared_ptr<fem::Form<T>> a, L;
   std::shared_ptr<la::Vector<T>> m, b;
 
-  std::function<void(const la::Vector<T> &, la::Vector<T> &)> action;
-  std::map<std::pair<dolfinx::fem::IntegralType, int>,
-           std::pair<std::vector<double>, int>>
-      coeff;
-  std::vector<T> constants;
+  // std::function<void(const la::Vector<T> &, la::Vector<T> &)> action;
+  // std::map<std::pair<dolfinx::fem::IntegralType, int>,
+  //          std::pair<std::vector<double>, int>>
+  //     coeff;
+  // std::vector<T> constants;
 
   std::span<T> g_, m_, b_, out;
   std::span<const T> _m, _b;
