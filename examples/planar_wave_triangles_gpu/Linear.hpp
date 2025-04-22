@@ -9,13 +9,16 @@
 #include <memory>
 #include <string>
 
+#include "petscksp.h"
 #include "src/linalg.hpp"
 #include <dolfinx.h>
+#include <dolfinx/fem/petsc.h>
 #include <dolfinx/geometry/utils.h>
 #include <dolfinx/la/Vector.h>
-#include <dolfinx/fem/petsc.h>
-#include "petscksp.h" 
 
+#include "src/mass.hpp"
+#include "src/vector.hpp"
+#include "src/cg_gpu.hpp"
 
 using namespace dolfinx;
 
@@ -55,15 +58,18 @@ void axpy(la::Vector<T> &r, T alpha, const la::Vector<T> &x,
 /// @param [in] sourceAmplitude The source amplitude
 /// @param [in] sourceSpeed The medium speed of sound that is in contact with
 /// the source
-template <typename T, int P> class LinearSpectral {
+template <typename T, int P, typename DeviceVector> class LinearSpectral {
+  static constexpr int Q = 3; // TODO
 public:
-  LinearSpectral(basix::FiniteElement<T> element,
-                 std::shared_ptr<mesh::Mesh<T>> Mesh,
+  LinearSpectral(std::shared_ptr<mesh::Mesh<T>> mesh,
+                 std::shared_ptr<fem::FunctionSpace<T>> V,
                  std::shared_ptr<mesh::MeshTags<std::int32_t>> FacetTags,
                  std::shared_ptr<fem::Function<T>> speedOfSound,
                  std::shared_ptr<fem::Function<T>> density,
+                 std::shared_ptr<fem::Function<T>> alpha,
                  const T &sourceFrequency, const T &sourceAmplitude,
-                 const T &sourceSpeed) {
+                 const T &sourceSpeed)
+      : mesh(mesh), gpu_action(mesh, V, alpha->x()->array()) {
     // MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
@@ -79,12 +85,7 @@ public:
     window_length = 4.0;
 
     // Mesh data
-    mesh = Mesh;
     ft = FacetTags;
-
-    // Define function space
-    V = std::make_shared<fem::FunctionSpace<T>>(
-        fem::create_functionspace(mesh, element));
 
     // Define field functions
     index_map = V->dofmap()->index_map;
@@ -134,9 +135,9 @@ public:
     }
 
     // Define LHS form (bilinear)
-    a = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_triangles_gpu_a_M, {V, V},
-        {{"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
+    a = std::make_shared<fem::Form<T>>(
+        fem::create_form<T>(*form_planar_wave_triangles_gpu_a_M, {V, V},
+                            {{"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
 
     auto A = la::petsc::Matrix(fem::petsc::create_matrix(*a), false);
     MatZeroEntries(A.mat());
@@ -146,14 +147,13 @@ public:
     MatAssemblyEnd(A.mat(), MAT_FINAL_ASSEMBLY);
 
     MatNullSpace nsp;
-    MatNullSpaceCreate(MPI_COMM_WORLD,
-                      PETSC_TRUE,   // Constant Nullspace (Pure NBc problem, imposes 0 mean)
-                      0,            
-                      0,           
-                      &nsp);
+    MatNullSpaceCreate(
+        MPI_COMM_WORLD,
+        PETSC_TRUE, // Constant Nullspace (Pure NBc problem, imposes 0 mean)
+        0, 0, &nsp);
     MatSetNearNullSpace(A.mat(), nsp);
     // MatSetNullSpace(A.mat(), nsp);
-    
+
     // la::petsc::options::set("ksp_type", "gmres");
     // la::petsc::options::set("ksp_type", "preonly");
 
@@ -163,12 +163,14 @@ public:
 
     lu.set_from_options();
     lu.set_operator(A.mat());
+    
 
-    m = std::make_shared<la::Vector<T>>(index_map, bs);
-    m_ = m->mutable_array();
-    std::fill(m_.begin(), m_.end(), 0.0);
-    fem::assemble_vector(m_, *a);
-    m->scatter_rev(std::plus<T>());
+    // Mass Lumped
+    // m = std::make_shared<la::Vector<T>>(index_map, bs);
+    // m_ = m->mutable_array();
+    // std::fill(m_.begin(), m_.end(), 0.0);
+    // fem::assemble_vector(m_, *a);
+    // m->scatter_rev(std::plus<T>());
 
     // Define RHS form
     L = std::make_shared<fem::Form<T>>(fem::create_form<T>(
@@ -181,9 +183,10 @@ public:
 
     // matrix free
     a_linear = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-      *form_planar_wave_triangles_gpu_a, {V}, {{"u", ui}, {"c0", c0}, {"rho0", rho0}}, {},
-      {}, {}));
+        *form_planar_wave_triangles_gpu_a, {V},
+        {{"u", ui}, {"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
 
+    // cpu setup
     coeff = fem::allocate_coefficient_storage(*a_linear);
     constants = fem::pack_constants(*a_linear);
 
@@ -256,22 +259,41 @@ public:
     fem::assemble_vector(b_, *L);
     b->scatter_rev(std::plus<T>());
 
-    la::Vector<T> test_result(*result);
 
-    {
-      la::petsc::Vector _u(la::petsc::create_vector_wrap(test_result), false);
-      la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
-      int its = lu.solve(_u.vec(), _b.vec());
-      std::cout << "KSP CG its=" << its << "\n";
-      auto ksp = lu.ksp();
-      KSPConvergedReason reason;
-      KSPGetConvergedReason(ksp, &reason);
-      if (reason < 0)
-        std::cerr << "KSP Failure: reason " << reason << "\n";
-    }
+    // KSP CPU CG
+    // {
+    //   la::Vector<T> test_result(*result);
+    //   la::petsc::Vector _u(la::petsc::create_vector_wrap(*test_result), false);
+    //   la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
+    //   int its = lu.solve(_u.vec(), _b.vec());
+    //   std::cout << "KSP CPU CG its=" << its << "\n";
+    //   auto ksp = lu.ksp();
+    //   KSPConvergedReason reason;
+    //   KSPGetConvergedReason(ksp, &reason);
+    //   if (reason < 0)
+    //     std::cerr << "KSP Failure: reason " << reason << "\n";
+    // }
 
-    int its = linalg::cg(*result, *b, action, 100, 1e-6);
-    std::cout << "House CG its=" << its << std::endl;
+    // GPU CG
+    DeviceVector x_d(index_map, bs);
+    x_d.copy_from_host(*result);
+    DeviceVector b_d(index_map, bs);
+    b_d.copy_from_host(*b);
+
+    double rtol = 1e-6;
+
+    dolfinx::acc::CGSolver<DeviceVector> cg(index_map, bs);
+    cg.set_max_iterations(100);
+    cg.set_tolerance(rtol);
+    int gpu_its = cg.solve(gpu_action, x_d, b_d, false);
+    std::cout << "House GPU CG its=" << gpu_its << std::endl;
+
+    // CPU CG
+    // int its = linalg::cg(*result, *b, action, 100, rtol);
+    // std::cout << "House CPU CG its=" << its << std::endl;
+
+    thrust::copy(x_d.thrust_vector().begin(), x_d.thrust_vector().end(),
+               result->mutable_array().begin());
   }
 
   /// Runge-Kutta 4th order solver
@@ -399,6 +421,7 @@ private:
   std::span<const T> _m, _b;
 
   la::petsc::KrylovSolver lu{MPI_COMM_WORLD};
+  acc::MatFreeMass<T, P, Q> gpu_action;
 };
 
 // Note:

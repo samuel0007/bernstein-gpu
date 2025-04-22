@@ -8,17 +8,18 @@
 #include <dolfinx.h>
 #include <dolfinx/common/types.h>
 #include <dolfinx/fem/Constant.h>
+#include <dolfinx/io/XDMFFile.h>
 #include <memory>
 #include <petscsystypes.h>
 
+#include "src/cg_gpu.hpp"
 #include "src/geometry.hpp"
+#include "src/linalg.hpp"
 #include "src/mass.hpp"
 #include "src/mesh.hpp"
 #include "src/quadrature.hpp"
 #include "src/util.hpp"
 #include "src/vector.hpp"
-#include "src/cg_gpu.hpp"
-#include "src/linalg.hpp"
 
 using namespace dolfinx;
 using T = PetscScalar;
@@ -32,7 +33,6 @@ using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
 static_assert(false)
 #endif
 
-
 template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
   constexpr int polynomial_degree = 2;
   // TODO: verify if expression integrates exactly. Probably? Comes from Basix.
@@ -41,9 +41,17 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
-  auto mesh = std::make_shared<mesh::Mesh<U>>(mesh::create_rectangle<U>(
-      comm, {{{0.0, 0.0}, {1.0, 1.0}}}, {10, 10}, mesh::CellType::triangle,
-      mesh::create_cell_partitioner(mesh::GhostMode::none)));
+  // auto mesh = std::make_shared<mesh::Mesh<U>>(mesh::create_rectangle<U>(
+  //     comm, {{{0.0, 0.0}, {1.0, 1.0}}}, {10, 10}, mesh::CellType::triangle,
+  //     mesh::create_cell_partitioner(mesh::GhostMode::none)));
+
+  // Read mesh and mesh tags
+  auto coord_element = fem::CoordinateElement<T>(mesh::CellType::triangle, 1);
+  io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf", "r");
+  auto mesh = std::make_shared<mesh::Mesh<T>>(fmesh.read_mesh(
+      coord_element, mesh::GhostMode::none, "planewave_2d_1_t"));
+  mesh->topology()->create_connectivity(1, 2);
+
   auto element = basix::create_element<U>(
       basix::element::family::P, basix::cell::type::triangle, polynomial_degree,
       basix::element::lagrange_variant::bernstein,
@@ -53,8 +61,8 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
 
   auto f = std::make_shared<fem::Function<T>>(V);
   auto ui = std::make_shared<fem::Function<T, U>>(V);
-  auto M = std::make_shared<fem::Form<T, U>>(fem::create_form<T>(
-      *form_mass_cg_M, {V}, {{"ui", ui}}, {{}}, {}, {}));
+  auto M = std::make_shared<fem::Form<T, U>>(
+      fem::create_form<T>(*form_mass_cg_M, {V}, {{"ui", ui}}, {{}}, {}, {}));
   auto L = std::make_shared<fem::Form<T, U>>(
       fem::create_form<T>(*form_mass_cg_L, {V}, {{"f", f}}, {}, {}, {}));
 
@@ -66,7 +74,6 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
         }
         return {out, {out.size()}};
       });
-
   auto topology = V->mesh()->topology_mutable();
   auto dofmap = V->dofmap();
   auto map = dofmap->index_map;
@@ -80,7 +87,7 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
   std::cout << "ncells=" << ncells << "\n";
   std::cout << "ndofs_global=" << ndofs_global << "\n";
   std::cout << "ndofs_local=" << ndofs_local << "\n";
-  
+
   // Assemble RHS vector
   la::Vector<T> b(map, map_bs);
   fem::assemble_vector(b.mutable_array(), *L);
@@ -105,13 +112,12 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
   // ----------- 3. GPU Matrix Free setup -----------
   DeviceVector b_d(map, map_bs);
   b_d.copy_from_host(b);
-  la::Vector<T> alpha(map, map_bs);
-  alpha.set(1.0);
-  acc::MatFreeMass<U, polynomial_degree, quadrature_points> gpu_action(mesh, V, alpha.array());
+  acc::MatFreeMass<U, polynomial_degree, quadrature_points> gpu_action(mesh, V,
+                                                                       1.0);
 
   // ----------- 4. CG -----------
   int max_iters = 200;
-  double rtol = 1e-6;
+  double rtol = 1e-11;
 
   // CPU
   la::Vector<T> x(map, map_bs);

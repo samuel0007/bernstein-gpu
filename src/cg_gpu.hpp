@@ -171,6 +171,7 @@ public:
     T rnorm = rnorm0;
 
     spdlog::info("CG: rnorm0 = {}", rnorm0);
+    if(rnorm0 < 1e-20) return 0;
 
     // Iterations of CG
     const T rtol2 = _rtol * _rtol;
@@ -237,7 +238,7 @@ public:
     }
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
-    std::cout << "CG loop only time : " << duration.count() << std::endl;
+    // std::cout << "CG loop only time : " << duration.count() << std::endl;
     spdlog::info("rnorm = {}", rnorm);
 
     return k;

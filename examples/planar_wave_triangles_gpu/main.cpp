@@ -17,6 +17,15 @@
 #define T_MPI MPI_DOUBLE
 using T = double;
 
+#if USE_HIP
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::HIP>;
+#elif USE_CUDA
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
+#else
+static_assert(false)
+#endif
+
+
 int main(int argc, char* argv[]) {
   dolfinx::init_logging(argc, argv);
   PetscInitialize(&argc, &argv, nullptr, nullptr);
@@ -80,10 +89,13 @@ int main(int argc, char* argv[]) {
       basix::element::lagrange_variant::unset,
       basix::element::dpc_variant::unset, true
     );
+    auto V = std::make_shared<fem::FunctionSpace<T>>(
+      fem::create_functionspace(mesh, element));
     auto V_DG = std::make_shared<fem::FunctionSpace<T>>(
         fem::create_functionspace(mesh, element_DG));
     auto c0 = std::make_shared<fem::Function<T>>(V_DG);
     auto rho0 = std::make_shared<fem::Function<T>>(V_DG);
+    auto alpha = std::make_shared<fem::Function<T>>(V_DG);
 
     auto cells_1 = mt_cell->find(1);
 
@@ -96,6 +108,12 @@ int main(int argc, char* argv[]) {
     std::for_each(cells_1.begin(), cells_1.end(),
                   [&](std::int32_t& i) { rho0_[i] = density; });
     rho0->x()->scatter_fwd();
+    
+    std::span<T> alpha_ = alpha->x()->mutable_array();
+    std::for_each(cells_1.begin(), cells_1.end(),
+                  [&](std::int32_t& i) { alpha_[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]); });
+    alpha->x()->scatter_fwd();
+
 
     // Temporal parameters
     const T CFL = 0.9;
@@ -125,7 +143,7 @@ int main(int argc, char* argv[]) {
     }
 
     // Model
-    auto model = LinearSpectral<T, 4>(element, mesh, mt_facet, c0, rho0, sourceFrequency,
+    auto model = LinearSpectral<T, degreeOfBasis, DeviceVector>(mesh, V, mt_facet, c0, rho0, alpha, sourceFrequency,
                                       sourceAmplitude, speedOfSound);
 
     // Solve
@@ -145,9 +163,23 @@ int main(int argc, char* argv[]) {
     // Final solution
     auto u_n = model.u_sol();
 
+    // Output space
+    basix::FiniteElement lagrange_element = basix::create_element<T>(
+      basix::element::family::P, basix::cell::type::triangle, degreeOfBasis,
+      basix::element::lagrange_variant::unset,
+      basix::element::dpc_variant::unset, false
+    );
+
+    auto V_out = std::make_shared<fem::FunctionSpace<T>>(
+      fem::create_functionspace(mesh, lagrange_element));
+
+    auto u_out = std::make_shared<fem::Function<T>>(V_out);
+    u_out->interpolate(*u_n);
+
+
     // Output to VTX
-    dolfinx::io::VTXWriter<T> u_out(mesh->comm(), "output_final.bp", {u_n}, "bp5");
-    u_out.write(0.0);
+    dolfinx::io::VTXWriter<T> u_out_f(mesh->comm(), "output_final.bp", {u_out}, "bp5");
+    u_out_f.write(0.0);
 
     // Check norms
     auto Norm = std::make_shared<fem::Form<T>>(

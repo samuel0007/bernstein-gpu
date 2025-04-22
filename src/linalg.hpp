@@ -52,7 +52,7 @@ int cg(auto &x, auto &b, auto action, int kmax = 50, double rtol = 1e-8) {
 
   // Iterations of CG
   auto rnorm0 = la::squared_norm(r);
-  if(rnorm0 < rtol) return 0;
+  if(rnorm0 < 1e-20) return 0;
 
   auto rtol2 = rtol * rtol;
   auto rnorm = rnorm0;
