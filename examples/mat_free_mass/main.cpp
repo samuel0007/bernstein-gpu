@@ -13,6 +13,7 @@
 
 #include "src/geometry.hpp"
 #include "src/mass.hpp"
+#include "src/mass_baseline.hpp"
 #include "src/mesh.hpp"
 #include "src/quadrature.hpp"
 #include "src/util.hpp"
@@ -63,7 +64,7 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
   desc.add_options()("help,h", "print usage message")
       ("nelements", po::value<int>()->default_value(10), "Number of elements (1D)")
       ("nreps", po::value<int>()->default_value(10), "number of repetitions")
-      ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator");
+      ("matrix_comparison", po::bool_switch()->default_value(false), "Compare result to CPU matrix operator");
   // clang-format on
 
   po::variables_map vm;
@@ -156,6 +157,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   // ----------- 2. GPU Matrix Free setup -----------
   acc::MatFreeMass<U, polynomial_degree, quadrature_points> gpu_action(
       mesh, V, alpha->x()->array());
+  acc::MatFreeMassBaseline<U, polynomial_degree, quadrature_points>
+      gpu_action_baseline(mesh, V, alpha->x()->array());
 
   // ----------- 3. Matrix Free apply -----------
 
@@ -167,6 +170,7 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   for (double i = 0; i < ndofs_local; ++i) {
     x.mutable_array()[i] = sin(i / ndofs_local);
+    // x.mutable_array()[i] = 1.;
   }
 
   // GPU
@@ -176,15 +180,29 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   x_d.copy_from_host(x);
   std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
-  auto start = std::chrono::high_resolution_clock::now();
-  for (int i = 0; i < nreps; ++i) {
-    gpu_action(x_d, y_d);
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < nreps; ++i) {
+      gpu_action_baseline(x_d, y_d);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = stop - start;
+    std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+              << std::endl;
+    std::cout << "Baseline Mat-free action Gdofs/s: "
+              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
-  auto stop = std::chrono::high_resolution_clock::now();
-  std::chrono::duration<double> duration = stop - start;
-  std::cout << "Mat-free Matvec time: " << duration.count() << std::endl;
-  std::cout << "Mat-free action Gdofs/s: "
-            << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < nreps; ++i) {
+      gpu_action(x_d, y_d);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = stop - start;
+    std::cout << "Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "Mat-free action Gdofs/s: "
+              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  }
 
   std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 

@@ -14,7 +14,7 @@ template <int N> __constant__ int dof_reordering_d[(N + 1) * N / 2];
 /// @param in_dofs input global dofs (x),   size ndofs
 /// @param out_dofs output global dofs (y), size ndofs
 /// @param alpha_cells DG0 alpha,           size ncells
-/// @param detJ_cells det(J_K(dzeta_q)),    size Q * Q * ncells 
+/// @param detJ_cells det(J_K(dzeta_q)),    size Q * Q * ncells
 /// @param dofmap global to local dofmap,   size K * ncells
 /// @param N number of dofs on 1D interval
 /// @param Q number of quadrature points on 1D interval
@@ -31,12 +31,12 @@ __launch_bounds__(Q * Q) __global__
   const int tx = threadIdx.x;
   const int ty = threadIdx.y;
   const int cell_idx = blockIdx.x;
-  constexpr int nq = Q * Q;
-  constexpr int nd = N * N;          // Number of dofs on square
+  // constexpr int nq = Q * Q;
+  // constexpr int nd = N * N;          // Number of dofs on square
   constexpr int K = (N + 1) * N / 2; // Number of dofs on triangle
 
   const int l_dof_idx =
-    dof_reordering_d<N>[triangle_ij(ty, tx)]; // Only valid for tx < N - ty
+      dof_reordering_d<N>[triangle_ij(ty, tx)]; // Only valid for tx < N - ty
   int g_dof_idx = -1;
 
   T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
@@ -158,5 +158,53 @@ __launch_bounds__(Q * Q) __global__
 
     // printf("out_dof[%d]=%f \n", g_dof_idx, f2val);
     atomicAdd(&out_dofs[g_dof_idx], f2val);
+  };
+}
+
+template <typename T, int nq> __constant__ T qwts_d[nq];
+
+template <typename T, int nd, int nq>
+__global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
+                                       T *__restrict__ out_dofs,
+                                       const T *__restrict__ alpha_cells,
+                                       const T *__restrict__ detJ_cells,
+                                       const std::int32_t *__restrict__ dofmap,
+                                       const T *__restrict__ phi) {
+  const int tx = threadIdx.x;
+  const int cell_idx = blockIdx.x;
+  int g_dof_idx = -1;
+
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
+
+  __shared__ T in_local_dofs[nd];
+  __shared__ T qvals[nq];
+
+  if (tx < nd) {
+    g_dof_idx = dofmap[tx + nd * cell_idx];
+    in_local_dofs[tx] = in_dofs[g_dof_idx];
   }
+  __syncthreads();
+  
+  // Load geometry data
+  T detJ_abs = fabs(detJ_cells[tx + cell_idx * nq]);
+
+  // u_i(x_q)
+  T qval = 0.;
+  for(int i = 0; i < nd; ++i) {
+    qval += phi[tx * nq + i] * in_local_dofs[i]; // Bank conflict probably
+  }
+
+  qvals[tx] = alpha * qval * detJ_abs;
+  __syncthreads();
+
+  if(tx < nd) {
+    T fval = 0.;
+    for(int i = 0; i < nq; ++i) {
+      fval += qwts_d<T, nq>[i] * qvals[i] * phi[i * nq + tx];
+    }
+  
+    atomicAdd(&out_dofs[g_dof_idx], fval);
+  }
+  
+  // printf("qvals[%d]=%f \n", tx, qvals[tx]);
 }
