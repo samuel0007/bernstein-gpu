@@ -4,6 +4,9 @@ option(cpu "Build for CPUs"	off)
 option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
+set(polynomial_degree 4 CACHE STRING "Polynomial degree (compile-time)")
+message(STATUS "Polynomial degree: ${polynomial_degree}")
+
 if(cpu AND nvidia OR cpu AND amd)
   message(FATAL_ERROR "You cannot select both a cpu build and a GPU (amd or nvidia) build. Only select one of the three options: cpu, nvidia, amd")
 endif()
@@ -52,11 +55,11 @@ endif()
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
-set(VERBOSE)
-
 if(NOT TARGET dolfinx)
   find_package(DOLFINX REQUIRED)
 endif()
+
+find_package(Boost 1.70 REQUIRED program_options)
 
 include(CheckSymbolExists)
 set(CMAKE_REQUIRED_INCLUDES ${PETSC_INCLUDE_DIRS})
@@ -88,21 +91,21 @@ function(add_example name)
   set(pyfile ${example_dir}/${name}.py)
   set(cfile ${CMAKE_CURRENT_BINARY_DIR}/${name}.c)
 
-
   add_custom_command(
     OUTPUT ${cfile}
-    COMMAND ffcx ${pyfile} ${SCALAR_TYPE}
+    COMMAND ${CMAKE_COMMAND} -E env polynomial_degree=${polynomial_degree} ffcx ${pyfile} ${SCALAR_TYPE}
     DEPENDS ${pyfile}
     COMMENT "Compiling ${name}.py"
     VERBATIM
   )
 
   add_executable(${name} ${example_dir}/main.cpp ${cfile})
-  target_link_libraries(${name} PRIVATE dolfinx bernsteinlib)
+  target_link_libraries(${name} PRIVATE dolfinx bernsteinlib Boost::program_options)
 
   target_compile_definitions(${name}
     PRIVATE
       DATA_DIR="${example_dir}"
+      POLYNOMIAL_DEGREE=${polynomial_degree}
   )
 
   if(amd)

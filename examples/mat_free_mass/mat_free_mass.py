@@ -12,8 +12,12 @@ from ufl import (
     inner,
 )
 import basix
+import os
 
-P = 10
+
+P = int(os.environ.get("polynomial_degree", 4))
+
+
 
 coord_element = element("Lagrange", "triangle", 1, lagrange_variant=LagrangeVariant.bernstein, shape=(2,))
 mesh = Mesh(coord_element)

@@ -11,11 +11,12 @@ from ufl import (
     dx,
     inner,
 )
+P = 5
 
 coord_element = element("Lagrange", "triangle", 1, shape=(2,))
 mesh = Mesh(coord_element)
 
-e = element("Lagrange", "triangle", 2, lagrange_variant=LagrangeVariant.bernstein)
+e = element("Lagrange", "triangle", P, lagrange_variant=LagrangeVariant.bernstein)
 V = FunctionSpace(mesh, e)
 
 u = TrialFunction(V)

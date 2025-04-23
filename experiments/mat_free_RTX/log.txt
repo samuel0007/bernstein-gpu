@@ -1,0 +1,122 @@
+$ cmake -S . -B build -Dnvidia=ON -Dpolynomial_degree=5
+cmake: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/libcurl.so.4: no version information available (required by cmake)
+-- Polynomial degree: 5
+-- Compiling for NVIDIA GPUs
+CMake Warning (dev) at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/dolfinx/DOLFINXConfig.cmake:49 (find_package):
+  Policy CMP0144 is not set: find_package uses upper-case <PACKAGENAME>_ROOT
+  variables.  Run "cmake --help-policy CMP0144" for policy details.  Use the
+  cmake_policy command to set the policy and suppress this warning.
+
+  Environment variable BOOST_ROOT is set to:
+
+    /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view
+
+  For compatibility, find_package is ignoring the variable, but code in a
+  .cmake module might still use it.
+Call Stack (most recent call first):
+  CMakeLists.txt:59 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found Boost 1.87.0 at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED COMPONENTS timer
+-- Found boost_headers 1.87.0 at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/boost_headers-1.87.0
+-- Found boost_timer 1.87.0 at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/boost_timer-1.87.0
+--   [x] libboost_timer.so.1.87.0
+--   [ ] libboost_timer.a
+-- Adding boost_timer dependencies: headers
+-- Found Boost: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70") found components: timer 
+-- Checking for Basix hints with /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/bin/python3
+-- Adding /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/python3.12/site-packages/basix to Basix search hints
+-- Found HDF5 at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/cmake via NO_MODULE. Now trying to extract locations etc.
+-- Trying to get properties of target hdf5-shared
+-- Found imported configurations: RELEASE
+-- Start search through imported configurations in the following order: Debug;RELWITHDEBINFO;RELEASE;DEBUG;RELEASE
+-- Selected imported configuration: RELEASE
+-- HDF5_DIR: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/cmake
+-- HDF5_DEFINITIONS: 
+-- HDF5_INCLUDE_DIRS: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/include
+-- HDF5_LIBRARIES: hdf5-shared
+-- HDF5_HL_LIBRARIES: 
+-- HDF5_C_DEFINITIONS: 
+-- HDF5_C_INCLUDE_DIR: 
+-- HDF5_C_INCLUDE_DIRS: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/include
+-- HDF5_C_LIBRARY: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/libhdf5.so.310.5.0
+-- HDF5_C_LIBRARIES: hdf5-shared
+-- HDF5_C_HL_LIBRARY: 
+-- HDF5_C_HL_LIBRARIES: 
+-- Defined targets (if any):
+-- ... hdf5::hdf5
+-- ... hdf5-static
+-- ... hdf5-shared
+-- Found Boost 1.87.0 at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED COMPONENTS program_options
+-- Found boost_program_options 1.87.0 at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/boost_program_options-1.87.0
+--   [x] libboost_program_options.so.1.87.0
+--   [ ] libboost_program_options.a
+-- Adding boost_program_options dependencies: headers
+-- Found Boost: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70") found components: program_options 
+-- Configuring done (0.6s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/sr2120/fenicsx-test/build
+$ cmake --build build --target mat_free_mass --clean-first
+cmake: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/libcurl.so.4: no version information available (required by cmake)
+[1/1] Cleaning all built files...
+Cleaning... 4 files.
+[1/4] Compiling mat_free_mass.py
+/usr/bin/cmake: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/libcurl.so.4: no version information available (required by /usr/bin/cmake)
+[2/4] Building C object CMakeFiles/mat_free_mass.dir/mat_free_mass.c.o
+[3/4] Building CUDA object CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o
+/home/sr2120/fenicsx-test/src/mass.hpp(116): warning #177-D: variable "K" was declared but never referenced
+      constexpr int K = (N + 1) * N / 2;
+                    ^
+          detected during instantiation of "void solver<T,U>(MPI_Comm, boost::program_options::variables_map) [with T=PetscScalar, U=T]" at line 249 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/home/sr2120/fenicsx-test/src/kernels.hpp(34): warning #177-D: variable "nq" was declared but never referenced
+    constexpr int nq = Q * Q;
+                  ^
+          detected during:
+            instantiation of "void dolfinx::acc::MatFreeMass<T, P, Q>::operator()(const Vector &, Vector &) [with T=T, P=5, Q=6, Vector=DeviceVector]" at line 181 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
+            instantiation of "void solver<T,U>(MPI_Comm, boost::program_options::variables_map) [with T=PetscScalar, U=T]" at line 249 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
+
+/home/sr2120/fenicsx-test/src/kernels.hpp(35): warning #177-D: variable "nd" was declared but never referenced
+    constexpr int nd = N * N;
+                  ^
+          detected during:
+            instantiation of "void dolfinx::acc::MatFreeMass<T, P, Q>::operator()(const Vector &, Vector &) [with T=T, P=5, Q=6, Vector=DeviceVector]" at line 181 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
+            instantiation of "void solver<T,U>(MPI_Comm, boost::program_options::variables_map) [with T=PetscScalar, U=T]" at line 249 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
+
+[4/4] Linking CUDA executable mat_free_mass
+$ build/mat_free_mass --nreps 200
+Num devices: 1
+Device: NVIDIA RTX 6000 Ada Generation: 8.9
+  Global memory:   48632 Mb
+  Shared memory:   48 kb
+  Constant memory: 0 Mb
+  Block registers: 65536
+
+  Warp size:         32
+  Threads per block: 1024
+  Max block dimensions: [ 1024, 1024, 64 ]
+  Max grid dimensions:  [ 2147483647, 65535, 65535 ]
+-----------------------------------
+Polynomial degree: 5
+Number of quadrature points (1D): 6
+Number of dofs per element: 21
+Number of cells-global: 200
+Number of dofs-global: 2601
+Number of dofs-local: 2601
+Number of repetitions: 200
+Scalar Type: float64
+-----------------------------------
+Sent dofmap to GPU (size = 16800 bytes)
+Sent alpha to GPU (size = 1600 bytes)
+Send geometry to GPU (size = 57600 bytes)
+norm(x_d)=26.6247
+Mat-free Matvec time: 0.0090661
+Mat-free action Gdofs/s: 0.0573786
+norm(y_d)=0.00581634
+norm(x)=26.6247
+norm(y)=0.00581634
+S:PASSED

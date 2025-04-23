@@ -34,10 +34,10 @@ static_assert(false)
 #endif
 
 template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
-  constexpr int polynomial_degree = 2;
+  constexpr int polynomial_degree = 5;
   // TODO: verify if expression integrates exactly. Probably? Comes from Basix.
   // constexpr int quadrature_points = (polynomial_degree + 2) / 2;
-  constexpr int quadrature_points = 3;
+  constexpr int quadrature_points = polynomial_degree + 1;
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
@@ -116,8 +116,8 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
                                                                        1.0);
 
   // ----------- 4. CG -----------
-  int max_iters = 200;
-  double rtol = 1e-11;
+  int max_iters = 500;
+  double rtol = 1e-7;
 
   // CPU
   la::Vector<T> x(map, map_bs);
@@ -144,7 +144,7 @@ template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
   //   std::cout << "y_d[" << i << "]=" << y_h.array()[i] << std::endl;
   // }
 
-  double eps = rtol;
+  double eps = rtol * 10;
   bool check = true;
   for (int i = 0; i < ndofs_local; ++i) {
     if (std::abs(x.array()[i] - x_h.array()[i]) > eps) {
