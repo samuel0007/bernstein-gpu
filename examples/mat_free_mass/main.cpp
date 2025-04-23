@@ -50,10 +50,10 @@ void axpy(auto &&r, auto alpha, auto &&x, auto &&y) {
 } // namespace linalg
 
 template <typename T, std::floating_point U> void solver(MPI_Comm comm) {
-  constexpr int polynomial_degree = 2;
+  constexpr int polynomial_degree = 10;
   // TODO: verify if expression integrates exactly. Probably? Comes from Basix.
   // constexpr int quadrature_points = (polynomial_degree + 2) / 2; 
-  constexpr int quadrature_points = 3;
+  constexpr int quadrature_points = polynomial_degree + 1;
 
 
   // ----------- 1. Problem Setup -----------

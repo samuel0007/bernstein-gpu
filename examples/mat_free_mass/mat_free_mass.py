@@ -13,11 +13,13 @@ from ufl import (
 )
 import basix
 
+P = 10
+
 coord_element = element("Lagrange", "triangle", 1, lagrange_variant=LagrangeVariant.bernstein, shape=(2,))
 mesh = Mesh(coord_element)
 
 # Function Space
-e = element("Lagrange", "triangle", 2, lagrange_variant=LagrangeVariant.bernstein)
+e = element("Lagrange", "triangle", P, lagrange_variant=LagrangeVariant.bernstein)
 e_DG = element("Lagrange", "triangle", 0, discontinuous=True)
 
 V = FunctionSpace(mesh, e)

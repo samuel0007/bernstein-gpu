@@ -1,5 +1,6 @@
 #pragma once
 
+#include "dof_ordering.hpp"
 #include "geometry.hpp"
 #include "kernels.hpp"
 #include "quadrature.hpp"
@@ -36,6 +37,9 @@ public:
     // auto [lcells, bcells] = compute_boundary_cells(V);
     // spdlog::debug("#lcells = {}, #bcells = {}", lcells.size(),
     // bcells.size());
+
+    auto element_p = this->V->element();
+    std::vector<int> dof_reordering = get_tp_ordering<P>(element_p);
 
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
@@ -94,6 +98,10 @@ public:
                                    qpts0.size() * sizeof(T)));
     err_check(deviceMemcpyToSymbol((qpts1_d<T, Q>), qpts1.data(),
                                    qpts1.size() * sizeof(T)));
+
+    // Copy dofmap reordering to the gpu
+    err_check(deviceMemcpyToSymbol((dof_reordering_d<P + 1>), dof_reordering.data(),
+                                   dof_reordering.size() * sizeof(int)));
   }
 
   template <typename Vector> void operator()(const Vector &in, Vector &out) {

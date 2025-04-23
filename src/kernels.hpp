@@ -8,6 +8,8 @@ template <typename T, int Q> __constant__ T qwts1_d[Q];
 
 template <typename T, int Q> __constant__ T qpts1_d[Q];
 
+template <int N> __constant__ int dof_reordering_d[(N + 1) * N / 2];
+
 /// Apply mass matrix operator \int alpha(x) * inner(u, v) dx to in_dofs.
 /// @param in_dofs input global dofs (x),   size ndofs
 /// @param out_dofs output global dofs (y), size ndofs
@@ -33,11 +35,8 @@ __launch_bounds__(Q * Q) __global__
   constexpr int nd = N * N;          // Number of dofs on square
   constexpr int K = (N + 1) * N / 2; // Number of dofs on triangle
 
-  constexpr int dof_reordering[6] = {
-      2, 3, 4, 1, 5, 0}; // TODO: compute reordering for any order
-
   const int l_dof_idx =
-      dof_reordering[triangle_ij(ty, tx)]; // Only valid for tx < N - ty
+    dof_reordering_d<N>[triangle_ij(ty, tx)]; // Only valid for tx < N - ty
   int g_dof_idx = -1;
 
   T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
