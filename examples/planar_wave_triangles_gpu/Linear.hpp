@@ -16,9 +16,9 @@
 #include <dolfinx/geometry/utils.h>
 #include <dolfinx/la/Vector.h>
 
+#include "src/cg_gpu.hpp"
 #include "src/mass.hpp"
 #include "src/vector.hpp"
-#include "src/cg_gpu.hpp"
 
 using namespace dolfinx;
 
@@ -28,7 +28,12 @@ template <typename T> void copy(const la::Vector<T> &in, la::Vector<T> &out) {
   std::span<const T> _in = in.array();
   std::span<T> _out = out.mutable_array();
   std::copy(_in.begin(), _in.end(), _out.begin());
-}
+};
+
+void copy_d(auto &in, auto &out) {
+  thrust::copy(in.thrust_vector().begin(), in.thrust_vector().end(),
+               out.thrust_vector().begin());
+};
 
 /// Compute vector r = alpha*x + y
 /// @param r Result
@@ -42,7 +47,7 @@ void axpy(la::Vector<T> &r, T alpha, const la::Vector<T> &x,
       x.array().begin(), x.array().begin() + x.index_map()->size_local(),
       y.array().begin(), r.mutable_array().begin(),
       [&alpha](const T &vx, const T &vy) { return vx * alpha + vy; });
-}
+};
 
 } // namespace kernels
 
@@ -163,7 +168,6 @@ public:
 
     lu.set_from_options();
     lu.set_operator(A.mat());
-    
 
     // Mass Lumped
     // m = std::make_shared<la::Vector<T>>(index_map, bs);
@@ -180,6 +184,9 @@ public:
 
     b = std::make_shared<la::Vector<T>>(index_map, bs);
     b_ = b->mutable_array();
+    b_d = std::make_shared<DeviceVector>(index_map, bs);
+    u_n_d = std::make_shared<DeviceVector>(index_map, bs);
+    v_n_d = std::make_shared<DeviceVector>(index_map, bs);
 
     // matrix free
     a_linear = std::make_shared<fem::Form<T>>(fem::create_form<T>(
@@ -211,6 +218,8 @@ public:
   }
   /// Set the initial values of u and v, i.e. u_0 and v_0
   void init() {
+    u_n_d->set(0.);
+    v_n_d->set(0.);
     u_n->x()->set(0.0);
     v_n->x()->set(0.0);
   }
@@ -224,6 +233,11 @@ public:
           std::shared_ptr<la::Vector<T>> v,
           std::shared_ptr<la::Vector<T>> result) {
     kernels::copy<T>(*v, *result);
+  }
+
+  void f0(T &t, DeviceVector &u, DeviceVector &v,
+          DeviceVector &result) {
+    kernels::copy_d(v, result);
   }
 
   /// Evaluate dv/dt = f1(t, u, v)
@@ -259,12 +273,11 @@ public:
     fem::assemble_vector(b_, *L);
     b->scatter_rev(std::plus<T>());
 
-
     // KSP CPU CG
     // {
     //   la::Vector<T> test_result(*result);
-    //   la::petsc::Vector _u(la::petsc::create_vector_wrap(*test_result), false);
-    //   la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
+    //   la::petsc::Vector _u(la::petsc::create_vector_wrap(*test_result),
+    //   false); la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
     //   int its = lu.solve(_u.vec(), _b.vec());
     //   std::cout << "KSP CPU CG its=" << its << "\n";
     //   auto ksp = lu.ksp();
@@ -293,7 +306,41 @@ public:
     // std::cout << "House CPU CG its=" << its << std::endl;
 
     thrust::copy(x_d.thrust_vector().begin(), x_d.thrust_vector().end(),
-               result->mutable_array().begin());
+                 result->mutable_array().begin());
+  }
+
+  void f1(T &t, DeviceVector &u_d, DeviceVector &v_d,
+          DeviceVector &result_d) {
+
+    // Apply windowing
+    if (t < period * window_length) {
+      window = 0.5 * (1.0 - cos(freq * M_PI * t / window_length));
+    } else {
+      window = 1.0;
+    }
+
+    // Update boundary condition
+    std::fill(g_.begin(), g_.end(),
+              window * p0 * w0 / s0 * cos(w0 * t)); // homogenous domain
+    // std::fill(g_.begin(), g_.end(), 2.0 * window * p0 * w0 / s0 * cos(w0 *
+    // t)); // heterogenous domain
+
+    // Assembly is done on CPU, update form coefficients
+    thrust::copy(u_d.thrust_vector().begin(), u_d.thrust_vector().end(), u_n->x()->mutable_array().begin());
+    thrust::copy(v_d.thrust_vector().begin(), v_d.thrust_vector().end(), v_n->x()->mutable_array().begin());
+
+    // Assemble RHS
+    std::fill(b_.begin(), b_.end(), 0.0);
+    fem::assemble_vector(b_, *L);
+    b->scatter_rev(std::plus<T>());
+    b_d->copy_from_host(*b);
+
+    double rtol = 1e-6;
+    dolfinx::acc::CGSolver<DeviceVector> cg(index_map, bs);
+    cg.set_max_iterations(100);
+    cg.set_tolerance(rtol);
+    int gpu_its = cg.solve(gpu_action, result_d, *b_d, false);
+    std::cout << "House GPU CG its=" << gpu_its << std::endl;
   }
 
   /// Runge-Kutta 4th order solver
@@ -301,7 +348,6 @@ public:
   /// @param[in] finalTime final time of the solver
   /// @param[in] timeStep  time step size of the solver
   void rk4(const T &startTime, const T &finalTime, const T &timeStep) {
-
     // Time-stepping parameters
     T t = startTime;
     T tf = finalTime;
@@ -312,27 +358,42 @@ public:
     // Time-stepping vectors
     std::shared_ptr<la::Vector<T>> u_, v_, un, vn, u0, v0, ku, kv;
 
-    // Placeholder vectors at time step n
-    u_ = std::make_shared<la::Vector<T>>(index_map, bs);
-    v_ = std::make_shared<la::Vector<T>>(index_map, bs);
+    DeviceVector u__d(index_map, bs);
+    DeviceVector v__d(index_map, bs);
+    DeviceVector un_d(index_map, bs);
+    DeviceVector vn_d(index_map, bs);
+    DeviceVector u0_d(index_map, bs);
+    DeviceVector v0_d(index_map, bs);
+    DeviceVector ku_d(index_map, bs);
+    DeviceVector kv_d(index_map, bs);
 
-    kernels::copy<T>(*u_n->x(), *u_);
-    kernels::copy<T>(*v_n->x(), *v_);
+    // Placeholder vectors at time step n
+    // u_ = std::make_shared<la::Vector<T>>(index_map, bs);
+    // v_ = std::make_shared<la::Vector<T>>(index_map, bs);
+
+    // kernels::copy<T>(*u_n->x(), *u_);
+    // kernels::copy<T>(*v_n->x(), *v_);
+
+    kernels::copy_d(*u_n_d, u__d);
+    kernels::copy_d(*v_n_d, v__d);
 
     // Placeholder vectors at intermediate time step n
-    un = std::make_shared<la::Vector<T>>(index_map, bs);
-    vn = std::make_shared<la::Vector<T>>(index_map, bs);
+    // un = std::make_shared<la::Vector<T>>(index_map, bs);
+    // vn = std::make_shared<la::Vector<T>>(index_map, bs);
 
-    // Placeholder vectors at start of time step
-    u0 = std::make_shared<la::Vector<T>>(index_map, bs);
-    v0 = std::make_shared<la::Vector<T>>(index_map, bs);
+    // // Placeholder vectors at start of time step
+    // u0 = std::make_shared<la::Vector<T>>(index_map, bs);
+    // v0 = std::make_shared<la::Vector<T>>(index_map, bs);
 
-    // Placeholder at k intermediate time step
-    ku = std::make_shared<la::Vector<T>>(index_map, bs);
-    kv = std::make_shared<la::Vector<T>>(index_map, bs);
+    // // Placeholder at k intermediate time step
+    // ku = std::make_shared<la::Vector<T>>(index_map, bs);
+    // kv = std::make_shared<la::Vector<T>>(index_map, bs);
 
-    kernels::copy<T>(*u_, *ku);
-    kernels::copy<T>(*v_, *kv);
+    // kernels::copy<T>(*u_, *ku);
+    // kernels::copy<T>(*v_, *kv);
+
+    kernels::copy_d(u__d, ku_d);
+    kernels::copy_d(v__d, kv_d);
 
     // Runge-Kutta 4th order time-stepping data
     std::array<T, 4> a_runge = {0.0, 0.5, 0.5, 1.0};
@@ -346,27 +407,42 @@ public:
       dt = std::min(dt, tf - t);
 
       // Store solution at start of time step
-      kernels::copy<T>(*u_, *u0);
-      kernels::copy<T>(*v_, *v0);
+      // kernels::copy<T>(*u_, *u0);
+      // kernels::copy<T>(*v_, *v0);
+
+      kernels::copy_d(u__d, u0_d);
+      kernels::copy_d(v__d, v0_d);
 
       // Runge-Kutta 4th order step
       for (int i = 0; i < 4; i++) {
-        kernels::copy<T>(*u0, *un);
-        kernels::copy<T>(*v0, *vn);
+        // kernels::copy<T>(*u0, *un);
+        // kernels::copy<T>(*v0, *vn);
 
-        kernels::axpy<T>(*un, dt * a_runge[i], *ku, *un);
-        kernels::axpy<T>(*vn, dt * a_runge[i], *kv, *vn);
+        kernels::copy_d(u0_d, un_d);
+        kernels::copy_d(v0_d, vn_d);
+
+        // kernels::axpy<T>(*un, dt * a_runge[i], *ku, *un);
+        // kernels::axpy<T>(*vn, dt * a_runge[i], *kv, *vn);
+
+        acc::axpy(un_d, dt * a_runge[i], ku_d, un_d);
+        acc::axpy(vn_d, dt * a_runge[i], kv_d, vn_d);
 
         // RK time evaluation
         tn = t + c_runge[i] * dt;
 
-        // Compute RHS vector
-        f0(tn, un, vn, ku);
-        f1(tn, un, vn, kv);
+        // // Compute RHS vector
+        // f0(tn, un, vn, ku);
+        // f1(tn, un, vn, kv);
 
-        // Update solution
-        kernels::axpy<T>(*u_, dt * b_runge[i], *ku, *u_);
-        kernels::axpy<T>(*v_, dt * b_runge[i], *kv, *v_);
+        f0(tn, un_d, vn_d, ku_d);
+        f1(tn, un_d, vn_d, kv_d);
+
+        // // Update solution
+        // kernels::axpy<T>(*u_, dt * b_runge[i], *ku, *u_);
+        // kernels::axpy<T>(*v_, dt * b_runge[i], *kv, *v_);
+
+        acc::axpy(u__d, dt * b_runge[i], ku_d, u__d);
+        acc::axpy(v__d, dt * b_runge[i], kv_d, v__d);
       }
 
       // Update time
@@ -382,8 +458,11 @@ public:
     }
 
     // Prepare solution at final time
-    kernels::copy<T>(*u_, *u_n->x());
-    kernels::copy<T>(*v_, *v_n->x());
+    thrust::copy(u__d.thrust_vector().begin(), u__d.thrust_vector().end(), u_n->x()->mutable_array().begin());
+    thrust::copy(v__d.thrust_vector().begin(), v__d.thrust_vector().end(), v_n->x()->mutable_array().begin());
+
+    // kernels::copy<T>(*u_, *u_n->x());
+    // kernels::copy<T>(*v_, *v_n->x());
     u_n->x()->scatter_fwd();
     v_n->x()->scatter_fwd();
   }
@@ -410,6 +489,8 @@ private:
   std::shared_ptr<fem::Function<T>> u, u_n, v_n, g, c0, rho0, ui;
   std::shared_ptr<fem::Form<T>> a, L, a_linear;
   std::shared_ptr<la::Vector<T>> m, b;
+
+  std::shared_ptr<DeviceVector> b_d, u_n_d, v_n_d;
 
   std::function<void(const la::Vector<T> &, la::Vector<T> &)> action;
   std::map<std::pair<dolfinx::fem::IntegralType, int>,
