@@ -1,4 +1,4 @@
--- Polynomial degree: 7
+-- Polynomial degree: 8
 -- Compiling for NVIDIA GPUs
 -- Found Boost 1.87.0 at /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/Boost-1.87.0
 --   Requested configuration: QUIET REQUIRED COMPONENTS timer
@@ -38,21 +38,21 @@
 --   [ ] libboost_program_options.a
 -- Adding boost_program_options dependencies: headers
 -- Found Boost: /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70") found components: program_options 
--- Configuring done (0.6s)
+-- Configuring done (0.5s)
 -- Generating done (0.0s)
 -- Build files have been written to: /home/sr2120/fenicsx-test/build
 [1/1] Cleaning all built files...
-Cleaning... 4 files.
+Cleaning... 2 files.
 [1/4] Compiling mat_free_mass.py
 [2/4] Building C object CMakeFiles/mat_free_mass.dir/mat_free_mass.c.o
 [3/4] Building CUDA object CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o
 FAILED: CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o 
-/home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/bin/nvcc -forward-unknown-to-host-compiler -DADIOS2_USE_MPI -DBOOST_PROGRAM_OPTIONS_DYN_LINK -DBOOST_PROGRAM_OPTIONS_NO_LIB -DBOOST_TIMER_DYN_LINK -DBOOST_TIMER_NO_LIB -DDATA_DIR=\"/home/sr2120/fenicsx-test/examples/mat_free_mass\" -DDOLFINX_VERSION=\"0.9.0\" -DHAS_ADIOS2 -DHAS_PARMETIS -DHAS_PETSC -DPOLYNOMIAL_DEGREE=7 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DUSE_CUDA=1 -I/home/sr2120/fenicsx-test/build -I/home/sr2120/fenicsx-test -I/home/sr2120/fenicsx-test/src -isystem /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/include -isystem /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/._view/x27mhrxpnfxxkafnfcn4bnkmzpeju4wu/include -isystem /home/sr2120/spack/opt/spack/linux-ubuntu24.04-sapphirerapids/gcc-13.3.0/openmpi-5.0.6-pgwckhgt5sgjfl7asocpzo6zxezoc2au/include -isystem /home/sr2120/spack/opt/spack/linux-ubuntu24.04-sapphirerapids/gcc-13.3.0/petsc-3.22.4-byl2svh3lptoa7hufvs7mnm4znvrgmyn/include -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo -O3 -DNDEBUG -std=c++20 "--generate-code=arch=compute_89,code=[compute_89,sm_89]" -MD -MT CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o -MF CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o.d -x cu -c /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp -o CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o
+/home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/bin/nvcc -forward-unknown-to-host-compiler -DADIOS2_USE_MPI -DBOOST_PROGRAM_OPTIONS_DYN_LINK -DBOOST_PROGRAM_OPTIONS_NO_LIB -DBOOST_TIMER_DYN_LINK -DBOOST_TIMER_NO_LIB -DDATA_DIR=\"/home/sr2120/fenicsx-test/examples/mat_free_mass\" -DDOLFINX_VERSION=\"0.9.0\" -DHAS_ADIOS2 -DHAS_PARMETIS -DHAS_PETSC -DPOLYNOMIAL_DEGREE=8 -DSPDLOG_COMPILED_LIB -DSPDLOG_FMT_EXTERNAL -DSPDLOG_SHARED_LIB -DUSE_CUDA=1 -I/home/sr2120/fenicsx-test/build -I/home/sr2120/fenicsx-test -I/home/sr2120/fenicsx-test/src -isystem /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/view/include -isystem /home/sr2120/spack/var/spack/environments/fenicsx-env/.spack-env/._view/x27mhrxpnfxxkafnfcn4bnkmzpeju4wu/include -isystem /home/sr2120/spack/opt/spack/linux-ubuntu24.04-sapphirerapids/gcc-13.3.0/openmpi-5.0.6-pgwckhgt5sgjfl7asocpzo6zxezoc2au/include -isystem /home/sr2120/spack/opt/spack/linux-ubuntu24.04-sapphirerapids/gcc-13.3.0/petsc-3.22.4-byl2svh3lptoa7hufvs7mnm4znvrgmyn/include -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo -O3 -DNDEBUG -std=c++20 "--generate-code=arch=compute_89,code=[compute_89,sm_89]" -MD -MT CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o -MF CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o.d -x cu -c /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp -o CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o
 /home/sr2120/fenicsx-test/src/mass_baseline.hpp(84): warning #177-D: variable "nq" was declared but never referenced
       constexpr int nq = 6 * (P==2) + 12 * (P == 3) + 16 * (P == 4) + 25 * (P==5);
                     ^
           detected during:
-            instantiation of "dolfinx::acc::MatFreeMassBaseline<T, P, Q>::MatFreeMassBaseline(std::shared_ptr<dolfinx::mesh::Mesh<T>>, std::shared_ptr<dolfinx::fem::FunctionSpace<T>>, std::span<const T, 18446744073709551615UL>) [with T=T, P=7, Q=8]" at line 161 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
+            instantiation of "dolfinx::acc::MatFreeMassBaseline<T, P, Q>::MatFreeMassBaseline(std::shared_ptr<dolfinx::mesh::Mesh<T>>, std::shared_ptr<dolfinx::fem::FunctionSpace<T>>, std::span<const T, 18446744073709551615UL>) [with T=T, P=8, Q=9]" at line 161 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
             instantiation of "void solver<T,U>(MPI_Comm, boost::program_options::variables_map) [with T=PetscScalar, U=T]" at line 267 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
 
 Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
@@ -61,8 +61,8 @@ Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
     __attribute__((shared)) T qvals[nq];
                               ^
           detected during:
-            instantiation of "void mass_operator_baseline<T,nd,nq>(const T *, T *, const T *, const T *, const int32_t *, const T *) [with T=T, nd=36, nq=0]" at line 129 of /home/sr2120/fenicsx-test/src/mass_baseline.hpp
-            instantiation of "void dolfinx::acc::MatFreeMassBaseline<T, P, Q>::operator()(const Vector &, Vector &) [with T=T, P=7, Q=8, Vector=DeviceVector]" at line 186 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
+            instantiation of "void mass_operator_baseline<T,nd,nq>(const T *, T *, const T *, const T *, const int32_t *, const T *) [with T=T, nd=45, nq=0]" at line 129 of /home/sr2120/fenicsx-test/src/mass_baseline.hpp
+            instantiation of "void dolfinx::acc::MatFreeMassBaseline<T, P, Q>::operator()(const Vector &, Vector &) [with T=T, P=8, Q=9, Vector=DeviceVector]" at line 186 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
             instantiation of "void solver<T,U>(MPI_Comm, boost::program_options::variables_map) [with T=PetscScalar, U=T]" at line 267 of /home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp
 
 /home/sr2120/fenicsx-test/src/mass.hpp(116): warning #177-D: variable "K" was declared but never referenced
@@ -72,7 +72,7 @@ Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
 
 1 error detected in the compilation of "/home/sr2120/fenicsx-test/examples/mat_free_mass/main.cpp".
 ninja: build stopped: subcommand failed.
-$ cmake -S . -B build -Dnvidia=ON -Dpolynomial_degree=7
+$ cmake -S . -B build -Dnvidia=ON -Dpolynomial_degree=8
 $ cmake --build build --target mat_free_mass --clean-first
 Traceback (most recent call last):
   File "/home/sr2120/fenicsx-test/run.py", line 88, in <module>

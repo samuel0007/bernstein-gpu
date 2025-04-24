@@ -161,7 +161,6 @@ __launch_bounds__(Q * Q) __global__
   };
 }
 
-template <typename T, int nq> __constant__ T qwts_d[nq];
 
 template <typename T, int nd, int nq>
 __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
@@ -186,12 +185,12 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
   __syncthreads();
   
   // Load geometry data
-  T detJ_abs = fabs(detJ_cells[tx + cell_idx * nq]);
+  T detJ_abs = detJ_cells[tx + cell_idx * nq];
 
   // u_i(x_q)
   T qval = 0.;
   for(int i = 0; i < nd; ++i) {
-    qval += phi[tx * nq + i] * in_local_dofs[i]; // Bank conflict probably
+    qval += phi[tx * nd + i] * in_local_dofs[i]; // Bank conflict probably
   }
 
   qvals[tx] = alpha * qval * detJ_abs;
@@ -200,11 +199,11 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
   if(tx < nd) {
     T fval = 0.;
     for(int i = 0; i < nq; ++i) {
-      fval += qwts_d<T, nq>[i] * qvals[i] * phi[i * nq + tx];
+      fval += qvals[i] * phi[i * nd + tx];
     }
   
     atomicAdd(&out_dofs[g_dof_idx], fval);
   }
   
-  // printf("qvals[%d]=%f \n", tx, qvals[tx]);
+  // printf("qvals[%d]=%f \n", tx, qval);
 }

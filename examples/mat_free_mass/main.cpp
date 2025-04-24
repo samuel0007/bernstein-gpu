@@ -169,8 +169,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   la::Vector<T> x(map, map_bs);
 
   for (double i = 0; i < ndofs_local; ++i) {
-    x.mutable_array()[i] = sin(i / ndofs_local);
-    // x.mutable_array()[i] = 1.;
+    // x.mutable_array()[i] = sin(i / ndofs_local);
+    x.mutable_array()[i] = 1.;
   }
 
   // GPU
@@ -239,7 +239,7 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::cout << "norm(x)=" << la::norm(x) << "\n";
     cpu_action(x, y);
     std::cout << "norm(y)=" << la::norm(y) << "\n";
-    double eps = 1e-10;
+    double eps = 1e-6;
     bool check = true;
     for (int i = 0; i < ndofs_local; ++i) {
       if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {

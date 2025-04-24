@@ -81,7 +81,7 @@ public:
                              shape[1], shape[2])
               << std::endl;
     assert(shape[0] == 1 && shape[3] == 1);
-    constexpr int nq = 6 * (P==2) + 12 * (P == 3) + 16 * (P == 4);
+    constexpr int nq = 6 * (P==2) + 12 * (P == 3) + 16 * (P == 4) + 25 * (P==5);
     assert(nq == shape[1]);
 
     this->phi_d.resize(phi_table.size());
@@ -91,7 +91,7 @@ public:
 
     // Precompute geometry data on cpu at collapsed quadrature points, and
     // copy it on the gpu
-    std::vector<T> detJ_geom = compute_geometry(mesh, qpts);
+    std::vector<T> detJ_geom = compute_geometry(mesh, qpts, qwts);
 
     this->detJ_geom_d.resize(detJ_geom.size());
     thrust::copy(detJ_geom.begin(), detJ_geom.end(), detJ_geom_d.begin());
@@ -101,10 +101,6 @@ public:
     std::cout << std::format("Send geometry to GPU (size = {} bytes)",
                              detJ_geom_d.size() * sizeof(T))
               << std::endl;
-
-    // Copy quadrature weights as symbols to the gpu
-    err_check(deviceMemcpyToSymbol((qwts_d<T, nq>), qwts.data(),
-                                   qwts.size() * sizeof(T)));
   }
 
   template <typename Vector> void operator()(const Vector &in, Vector &out) {
@@ -115,7 +111,7 @@ public:
 
     constexpr int N = P + 1;
     constexpr int nd = (N + 1) * N / 2; // Number of dofs on triangle (is always smaller than nq)
-    constexpr int nq = 6 * (P==2) + 12 * (P == 3) + 16 * (P == 4);
+    constexpr int nq = 6 * (P==2) + 12 * (P == 3) + 16 * (P == 4) + 25 * (P==5);
 
     assert(dofmap_d_span.size() == this->number_of_local_cells * nd);
     assert(in.array().size() == out.mutable_array().size());
