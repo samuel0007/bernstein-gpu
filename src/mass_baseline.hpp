@@ -16,7 +16,7 @@ public:
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
   MatFreeMassBaseline(std::shared_ptr<mesh::Mesh<T>> mesh,
-              std::shared_ptr<fem::FunctionSpace<T>> V, T alpha)
+                      std::shared_ptr<fem::FunctionSpace<T>> V, T alpha)
       : mesh(mesh), V(V) {
     auto dofmap = V->dofmap();
     auto map = dofmap->index_map;
@@ -27,8 +27,8 @@ public:
   }
 
   MatFreeMassBaseline(std::shared_ptr<mesh::Mesh<T>> mesh,
-              std::shared_ptr<fem::FunctionSpace<T>> V,
-              std::span<const T> alpha)
+                      std::shared_ptr<fem::FunctionSpace<T>> V,
+                      std::span<const T> alpha)
       : mesh(mesh), V(V) {
     init(alpha);
   }
@@ -81,13 +81,16 @@ public:
                              shape[1], shape[2])
               << std::endl;
     assert(shape[0] == 1 && shape[3] == 1);
-    constexpr int nq = 6 * (P==2) + 12 * (P == 3) + 16 * (P == 4) + 25 * (P==5);
+    constexpr int nq = 6 * (P == 2) + 12 * (P == 3) + 16 * (P == 4) +
+                       25 * (P == 5) + 33 * (P == 6) + 42 * (P == 7) +
+                       55 * (P == 8) + 67 * (P == 9) + 79 * (P == 10) +
+                       96 * (P == 11) + 112 * (P == 12);
     assert(nq == shape[1]);
 
     this->phi_d.resize(phi_table.size());
     thrust::copy(phi_table.begin(), phi_table.end(), phi_d.begin());
     this->phi_d_span = std::span<const T>(
-      thrust::raw_pointer_cast(phi_d.data()), phi_d.size());
+        thrust::raw_pointer_cast(phi_d.data()), phi_d.size());
 
     // Precompute geometry data on cpu at collapsed quadrature points, and
     // copy it on the gpu
@@ -110,8 +113,13 @@ public:
     T *out_dofs = out.mutable_array().data();
 
     constexpr int N = P + 1;
-    constexpr int nd = (N + 1) * N / 2; // Number of dofs on triangle (is always smaller than nq)
-    constexpr int nq = 6 * (P==2) + 12 * (P == 3) + 16 * (P == 4) + 25 * (P==5);
+    constexpr int nd =
+        (N + 1) * N /
+        2; // Number of dofs on triangle (is always smaller than nq)
+    constexpr int nq = 6 * (P == 2) + 12 * (P == 3) + 16 * (P == 4) +
+                       25 * (P == 5) + 33 * (P == 6) + 42 * (P == 7) +
+                       55 * (P == 8) + 67 * (P == 9) + 79 * (P == 10) +
+                       96 * (P == 11) + 112 * (P == 12);
 
     assert(dofmap_d_span.size() == this->number_of_local_cells * nd);
     assert(in.array().size() == out.mutable_array().size());
@@ -125,8 +133,9 @@ public:
     dim3 grid_size(this->number_of_local_cells);
     dim3 block_size(nq);
     mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
-          in_dofs, out_dofs, this->alpha_d_span.data(),
-          this->detJ_geom_d_span.data(), this->dofmap_d_span.data(), this->phi_d_span.data());
+        in_dofs, out_dofs, this->alpha_d_span.data(),
+        this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
+        this->phi_d_span.data());
     check_device_last_error();
   }
 
