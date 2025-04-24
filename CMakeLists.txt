@@ -122,6 +122,7 @@ function(add_example name)
 endfunction()
 
 add_example(mat_free_mass)
+add_example(mat_free_mass3D)
 add_example(mass_cg)
 add_example(planar_wave)
 add_example(planar_wave_triangles)

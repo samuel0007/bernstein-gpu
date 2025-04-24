@@ -133,7 +133,7 @@ create_quadrature_triangle_duffy(int q) {
   // Note: this computes the quadrature nodes on [-1, 1]
   auto [pts0, wts0] = compute_gauss_jacobi_rule<T>(0.0, q);
   auto [pts1, wts1] = compute_gauss_jacobi_rule<T>(1.0, q);
-  
+
   // Rescale to [0, 1]
   std::ranges::transform(wts0, wts0.begin(), [](auto w) { return 0.5 * w; });
   std::ranges::transform(pts0, pts0.begin(),
@@ -158,4 +158,49 @@ create_quadrature_triangle_duffy(int q) {
   }
 
   return {{{pts0, wts0}, {pts1, wts1}, {ptsT, wtsT}}};
+}
+
+template<typename T> std::array<std::pair<std::vector<T>, std::vector<T>>, 4>
+create_quadrature_tetrahedron_duffy(int q) {
+  const int p = q * 2 - 2;
+  auto [ptsT, wtsT] = basix::quadrature::make_quadrature<T>(
+      basix::quadrature::type::gauss_jacobi, basix::cell::type::tetrahedron,
+      basix::polyset::type::standard, p);
+  assert(ptsT.size() == q * q * q * 3);
+
+  // Note: this computes the quadrature nodes on [-1, 1]
+  auto [pts0, wts0] = compute_gauss_jacobi_rule<T>(0.0, q);
+  auto [pts1, wts1] = compute_gauss_jacobi_rule<T>(1.0, q);
+  auto [pts2, wts2] = compute_gauss_jacobi_rule<T>(2.0, q);
+
+  // Rescale to [0, 1]
+  std::ranges::transform(wts0, wts0.begin(), [](auto w) { return 0.5 * w; });
+  std::ranges::transform(pts0, pts0.begin(),
+                         [](auto x) { return 0.5 * (x + 1.0); });
+  std::ranges::transform(wts1, wts1.begin(), [](auto w) { return 0.25 * w; });
+  std::ranges::transform(pts1, pts1.begin(),
+                         [](auto x) { return 0.5 * (x + 1.0); });
+  std::ranges::transform(wts2, wts2.begin(), [](auto w) { return 0.125 * w; });
+  std::ranges::transform(pts2, pts2.begin(),
+                         [](auto x) { return 0.5 * (x + 1.0); });
+
+  mdspan_t<T, 2> x(ptsT.data(), q * q * q, 3);
+
+  // Check if collapsed triangle quadrature = uncollapsed 1d tensor product on
+  // quad
+  int c = 0;
+  T eps = 1e-10;
+  for (int i = 0; i < q; ++i) {
+    for (int j = 0; j < q; ++j) {
+      for (int k = 0; k < q; ++k) {
+        assert(std::abs(x(c, 0) - pts0[i] * (1.0 - pts1[j]) * (1.0 - pts2[k])) < eps);
+        assert(std::abs(x(c, 1) - pts1[j] * (1.0 - pts2[k])) < eps);
+        assert(std::abs(x(c, 2) - pts2[k]) < eps);
+        assert(std::abs((wtsT[c] - wts0[i] * wts1[j] * wts2[k])) < eps);
+        ++c;
+      }
+    }
+  }
+
+  return {{{pts0, wts0}, {pts1, wts1}, {pts2, wts2}, {ptsT, wtsT}}};
 }
