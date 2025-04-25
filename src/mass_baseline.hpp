@@ -81,7 +81,7 @@ public:
                              shape[1], shape[2])
               << std::endl;
     assert(shape[0] == 1 && shape[3] == 1);
-    constexpr int nq = 6 * (P == 2) + 12 * (P == 3) + 16 * (P == 4) +
+    constexpr int nq = 4 * (P == 1) + 6 * (P == 2) + 12 * (P == 3) + 16 * (P == 4) +
                        25 * (P == 5) + 33 * (P == 6) + 42 * (P == 7) +
                        55 * (P == 8) + 67 * (P == 9) + 79 * (P == 10) +
                        96 * (P == 11) + 112 * (P == 12);
@@ -116,7 +116,7 @@ public:
     constexpr int nd =
         (N + 1) * N /
         2; // Number of dofs on triangle (is always smaller than nq)
-    constexpr int nq = 6 * (P == 2) + 12 * (P == 3) + 16 * (P == 4) +
+    constexpr int nq = 4 * (P == 1) + 6 * (P == 2) + 12 * (P == 3) + 16 * (P == 4) +
                        25 * (P == 5) + 33 * (P == 6) + 42 * (P == 7) +
                        55 * (P == 8) + 67 * (P == 9) + 79 * (P == 10) +
                        96 * (P == 11) + 112 * (P == 12);
@@ -235,8 +235,8 @@ public:
               << std::endl;
     assert(shape[0] == 1 && shape[3] == 1);
     constexpr int nq = 4 * (P == 1) + 14 * (P == 2) + 12 * (P == 3) + 45 * (P == 4) +
-                       74 * (P == 5) + 33 * (P == 6) + 42 * (P == 7) +
-                       55 * (P == 8) + 1000 * (P == 9) + 1331 * (P == 10) +
+                       74 * (P == 5) + 122 * (P == 6) + 177 * (P == 7) +
+                       729 * (P == 8) + 1000 * (P == 9) + 1331 * (P == 10) +
                        96 * (P == 11) + 112 * (P == 12);
     assert(nq == shape[1]);
 
@@ -268,9 +268,9 @@ public:
     constexpr int N = P + 1;
     constexpr int nd = N * (N + 1) * (N + 2) /
                        6; // Number of dofs on tets (is always smaller than nq)
-    constexpr int nq = 4 * (P == 1) * 14 * (P == 2) + 12 * (P == 3) +
-                       45 * (P == 4) + 74 * (P == 5) + 33 * (P == 6) +
-                       42 * (P == 7) + 55 * (P == 8) + 1000 * (P == 9) +
+    constexpr int nq = 4 * (P == 1) * 14 * (P == 2) + 24 * (P == 3) +
+                       45 * (P == 4) + 74 * (P == 5) + 122 * (P == 6) +
+                       177 * (P == 7) + 729 * (P == 8) + 1000 * (P == 9) +
                        1331 * (P == 10) + 96 * (P == 11) + 112 * (P == 12);
 
     assert(dofmap_d_span.size() == this->number_of_local_cells * nd);
