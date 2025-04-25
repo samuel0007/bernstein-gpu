@@ -129,7 +129,7 @@ public:
     assert(in.array().size() == out.mutable_array().size());
     assert(detJ_geom_d_span.size() == this->number_of_local_cells * Q * Q * Q);
 
-    mass_operator<T, N, Q><<<grid_size, block_size>>>(
+    mass_operator3D<T, N, Q><<<grid_size, block_size>>>(
         in_dofs, out_dofs, this->alpha_d_span.data(),
         this->detJ_geom_d_span.data(), this->dofmap_d_span.data());
     check_device_last_error();

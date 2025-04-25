@@ -62,9 +62,9 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
-      ("nelements", po::value<int>()->default_value(2), "Number of elements (1D)")
-      ("nreps", po::value<int>()->default_value(10), "number of repetitions")
-      ("matrix_comparison", po::bool_switch()->default_value(false), "Compare result to CPU matrix operator");
+      ("nelements", po::value<int>()->default_value(1), "Number of elements (1D)")
+      ("nreps", po::value<int>()->default_value(1), "number of repetitions")
+      ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator");
   // clang-format on
 
   po::variables_map vm;
@@ -112,7 +112,7 @@ void solver(MPI_Comm comm, po::variables_map vm) {
       fem::create_functionspace(mesh, element_DG, {}));
 
   auto alpha = std::make_shared<fem::Function<T>>(V_DG);
-  alpha->x()->set(0.5);
+  alpha->x()->set(1.0);
 
   // Action of the bilinear form "a" on a function ui
   auto ui = std::make_shared<fem::Function<T, U>>(V);
@@ -192,17 +192,17 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::cout << "Baseline Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
-  // {
-  //   auto start = std::chrono::high_resolution_clock::now();
-  //   for (int i = 0; i < nreps; ++i) {
-  //     gpu_action(x_d, y_d);
-  //   }
-  //   auto stop = std::chrono::high_resolution_clock::now();
-  //   std::chrono::duration<double> duration = stop - start;
-  //   std::cout << "Mat-free Matvec time: " << duration.count() << std::endl;
-  //   std::cout << "Mat-free action Gdofs/s: "
-  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-  // }
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < nreps; ++i) {
+      gpu_action(x_d, y_d);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = stop - start;
+    std::cout << "Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "Mat-free action Gdofs/s: "
+              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  }
 
   std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
@@ -242,9 +242,9 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     double eps = 1e-6;
     bool check = true;
     for (int i = 0; i < ndofs_local; ++i) {
+      // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i, y.array()[i], i, y_h.array()[i]);
       if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
         check = false;
-        break;
       }
     }
     std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
