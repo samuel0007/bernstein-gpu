@@ -13,6 +13,7 @@
 
 #include "src/geometry.hpp"
 #include "src/mass3D.hpp"
+#include "src/mass_sf.hpp"
 #include "src/mass_baseline.hpp"
 #include "src/mesh.hpp"
 #include "src/quadrature.hpp"
@@ -92,12 +93,12 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
   auto mesh = std::make_shared<mesh::Mesh<U>>(mesh::create_box<U>(
-      comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}}, {nelements, nelements, nelements},
-      mesh::CellType::tetrahedron,
+      comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}},
+      {nelements, nelements, nelements}, mesh::CellType::tetrahedron,
       mesh::create_cell_partitioner(mesh::GhostMode::none)));
   auto element = basix::create_element<U>(
-      basix::element::family::P, basix::cell::type::tetrahedron, polynomial_degree,
-      basix::element::lagrange_variant::bernstein,
+      basix::element::family::P, basix::cell::type::tetrahedron,
+      polynomial_degree, basix::element::lagrange_variant::bernstein,
       basix::element::dpc_variant::unset, false);
 
   auto element_DG = basix::create_element<U>(
@@ -157,6 +158,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   // ----------- 2. GPU Matrix Free setup -----------
   acc::MatFreeMass3D<U, polynomial_degree, quadrature_points> gpu_action(
       mesh, V, alpha->x()->array());
+  acc::MatFreeMassSF3D<U, polynomial_degree, quadrature_points> gpu_action_sf(
+      mesh, V, alpha->x()->array());
   acc::MatFreeMassBaseline3D<U, polynomial_degree, quadrature_points>
       gpu_action_baseline(mesh, V, alpha->x()->array());
 
@@ -195,14 +198,26 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i) {
-      gpu_action(x_d, y_d);
+      gpu_action_sf(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
-    std::cout << "Mat-free Matvec time: " << duration.count() << std::endl;
-    std::cout << "Mat-free action Gdofs/s: "
+    std::cout << "SF Mat-free Matvec time: " << duration.count()
+              << std::endl;
+    std::cout << "SF Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
+  // {
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (int i = 0; i < nreps; ++i) {
+  //     gpu_action(x_d, y_d);
+  //   }
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   std::chrono::duration<double> duration = stop - start;
+  //   std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
+  //   std::cout << "SF OTF Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  // }
 
   std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
@@ -242,7 +257,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     double eps = 1e-6;
     bool check = true;
     for (int i = 0; i < ndofs_local; ++i) {
-      // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i, y.array()[i], i, y_h.array()[i]);
+      // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i,
+      // y.array()[i], i, y_h.array()[i]);
       if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
         check = false;
       }

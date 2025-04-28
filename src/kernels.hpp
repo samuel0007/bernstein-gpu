@@ -129,7 +129,7 @@ __launch_bounds__(Q *Q) __global__
     }
 
     f1[tx][ty] = f1val;
-    // printf("f1[%d, %d]=%f\n", tx, ty, f1[tx][ty]);
+    printf("f1[%d, %d]=%f\n", tx, ty, f1[tx][ty]);
   }
 
   __syncthreads();
@@ -427,6 +427,289 @@ __launch_bounds__(Q *Q *Q) __global__
           w *= r * (N - 1 - tz - ty - k) / (1 + k);
         }
         f3[tz][ty][tx] += w * f2[tz][ty][i3];
+      }
+    }
+  }
+  __syncthreads();
+
+  if (tx < N - ty - tz && ty < N - tz && tz < N) {
+    // printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
+    atomicAdd(&out_dofs[g_dof_idx], f3[tz][ty][tx]);
+  }
+}
+
+/// Apply mass matrix operator \int alpha(x) * inner(u, v) dx to in_dofs.
+/// @param in_dofs input global dofs (x),   size ndofs
+/// @param out_dofs output global dofs (y), size ndofs
+/// @param alpha_cells DG0 alpha,           size ncells
+/// @param detJ_cells det(J_K(dzeta_q)),    size Q * Q * ncells
+/// @param dofmap global to local dofmap,   size K * ncells
+/// @param phi_1 B_i^N(x_q),                size Q * N
+/// @param phi_0_N B_j^i(x_q),              size N * Q * N
+/// @param in_dofs input global dofs (x),   size ndofs
+/// @param N number of dofs on 1D interval
+/// @param Q number of quadrature points on 1D interval
+template <typename T, int N, int Q>
+__launch_bounds__(Q *Q) __global__
+    void mass_operator_sf(const T *__restrict__ in_dofs,
+                          T *__restrict__ out_dofs,
+                          const T *__restrict__ alpha_cells,
+                          const T *__restrict__ detJ_cells,
+                          const std::int32_t *__restrict__ dofmap,
+                          const T *__restrict__ phi_1,
+                          const T *__restrict__ phi_0_N) {
+  auto triangle_ij = [](auto i, auto j) {
+    return (i + j + 1) * (i + j) / 2 + j;
+  }; // Maps 2d grid to triangle: TODO think about ordering
+
+  const int tx = threadIdx.x;
+  const int ty = threadIdx.y;
+  const int cell_idx = blockIdx.x;
+  constexpr int K = (N + 1) * N / 2; // Number of dofs on triangle
+
+  const int l_dof_idx =
+      dof_reordering_d<N>[triangle_ij(ty, tx)]; // Only valid for tx < N - ty
+  int g_dof_idx = -1;
+
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
+  // Load geometry data
+  T detJ_abs = fabs(detJ_cells[tx + ty * Q + cell_idx * Q * Q]);
+
+  __shared__ T c0[N][N];
+  __shared__ T c1[N][Q];
+  __shared__ T c2[Q][Q];
+
+  if (ty < N)
+    c1[ty][tx] = 0.;
+  if (tx < N && ty < N) {
+    c0[ty][tx] = 0.;
+  }
+  if (tx < N - ty && ty < N) {
+    g_dof_idx = dofmap[l_dof_idx + cell_idx * K];
+    c0[ty][tx] = in_dofs[g_dof_idx];
+  }
+  __syncthreads();
+  // if (tx < N && ty < N) {
+  //   printf("c0[%d, %d]=%f\n", ty, tx, c0[ty][tx]);
+  // }
+  // 1. Evaluate u(x_q) (dofs -> c2)
+  // 1.1 c0[N][N] -> c1[N][Q]
+  // ty := alpha1, tx := i2
+  if (ty < N) {
+    for (int alpha2 = 0; alpha2 < N - ty; ++alpha2) {
+      // B_alpha2^{p - alpha1}(t0)
+      c1[ty][tx] +=
+          phi_0_N[(N - 1 - ty) * Q * N + tx * N + alpha2] * c0[ty][alpha2];
+    }
+    // printf("c1[%d, %d]=%f\n", ty, tx, c1[ty][tx]);
+  }
+
+  __syncthreads();
+
+  T qval = 0.;
+  // i1:= ty, i2 := tx
+  for (int alpha1 = 0; alpha1 < N; ++alpha1) {
+    // Load B_alpha1^N(t1)
+    qval += phi_1[ty * N + alpha1] * c1[alpha1][tx];
+  }
+
+  // 2. Apply geometry
+  c2[ty][tx] = alpha * qval * detJ_abs;
+  // printf("qvals[%d, %d]=%f\n", ty, tx, qvals[ty][tx]);
+  // printf("qvals[%d, %d]=%f\n", ty, tx, qval);
+  __syncthreads();
+
+  // 3. Compute Moments (qvals -> dofs)
+  T(&f0)[Q][Q] = c2; // qq
+  T(&f1)[N][Q] = c1; // nq
+  T(&f2)[N][N] = c0; // nn
+
+  if (ty < N && tx < N)
+    f2[ty][tx] = 0.;
+  if (ty < N)
+    f1[ty][tx] = 0.;
+  __syncthreads();
+  // 3.1 f0[Q][Q] -> f1[N][Q]
+  // ty := alpha1, tx := i2
+  {
+    if (ty < N) {
+      for (int i1 = 0; i1 < Q; ++i1) {
+        T w = qwts1_d<T, Q>[i1];
+        f1[ty][tx] += w * phi_1[i1 * N + ty] * f0[i1][tx];
+      }
+      // printf("f1[%d, %d]=%f\n", ty, tx, f1[ty][tx]);
+    }
+  }
+  __syncthreads();
+
+  // 3.1 f1[N][Q] -> f2[Q][Q]
+  // ty := alpha1, tx := alpha2
+  {
+    if (ty < N && tx < N) {
+      for (int i2 = 0; i2 < Q; ++i2) {
+        T w = qwts0_d<T, Q>[i2];
+        f2[ty][tx] +=
+            w * phi_0_N[(N - 1 - ty) * Q * N + i2 * N + tx] * f1[ty][i2];
+      }
+    }
+  }
+
+  if (tx < N - ty && ty < N) {
+    // printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
+    atomicAdd(&out_dofs[g_dof_idx], f2[ty][tx]);
+  }
+}
+
+/// Apply mass matrix operator \int alpha(x) * inner(u, v) dx to in_dofs.
+/// @param in_dofs input global dofs (x),   size ndofs
+/// @param out_dofs output global dofs (y), size ndofs
+/// @param alpha_cells DG0 alpha,           size ncells
+/// @param detJ_cells det(J_K(dzeta_q)),    size Q * Q * ncells
+/// @param dofmap global to local dofmap,   size K * ncells
+/// @param phi_1 B_i^N(x_q),                size Q * N
+/// @param phi_0_N B_j^i(x_q),              size N * Q * N
+/// @param in_dofs input global dofs (x),   size ndofs
+/// @param N number of dofs on 1D interval
+/// @param Q number of quadrature points on 1D interval
+template <typename T, int N, int Q>
+__launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
+    const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
+    const T *__restrict__ alpha_cells, const T *__restrict__ detJ_cells,
+    const std::int32_t *__restrict__ dofmap, const T *__restrict__ phi_2,
+    const T *__restrict__ phi_1_N, const T *__restrict__ phi_0_N) {
+  auto tet_ijk = [](int i, int j, int k) {
+    int w = i + j + k;
+    int s = j + k;
+    return (w + 2) * (w + 1) * w / 6 + (s + 1) * s / 2 + k;
+  }; // Maps 3d grid to tet using twice the cantor pairing function: TODO think
+     // about ordering
+
+  const int tx = threadIdx.x;
+  const int ty = threadIdx.y;
+  const int tz = threadIdx.z;
+
+  constexpr int K = N * (N + 1) * (N + 2) / 6; // Number of dofs on tet
+
+  const int cell_idx = blockIdx.x;
+
+  const int l_dof_idx =
+      tet_ijk(tz, ty, tx); // Only valid for ty < N - tz, tx < N - ty - tz
+  int g_dof_idx = -1;
+
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
+
+  // Load geometry data
+  T detJ_abs =
+      fabs(detJ_cells[tx + ty * Q + tz * Q * Q + cell_idx * Q * Q * Q]);
+
+  __shared__ T c0[N][N][N]; // in_local_dofs
+  __shared__ T c1[N][N][Q];
+  __shared__ T c2[N][Q][Q];
+  __shared__ T c3[Q][Q][Q];
+
+  if (tz < N && ty < N && tx < N)
+    c0[tz][ty][tx] = 0.;
+  if (ty < N && tz < N)
+    c1[tz][ty][tx] = 0.;
+  if (tz < N)
+    c2[tz][ty][tx] = 0.;
+
+  if (tx < N - ty - tz && ty < N - tz && tz < N) {
+    g_dof_idx = dofmap[l_dof_idx + cell_idx * K];
+    // printf("l_dof_idx[%d][%d][%d] = %d\n", tz, ty, tx, l_dof_idx);
+
+    c0[tz][ty][tx] = in_dofs[g_dof_idx];
+    // if (cell_idx == 0)
+    //   printf("in_local_dofs[%d][%d][%d] = %f\n", tz, ty, tx, c0[tz][ty][tx]);
+  }
+  __syncthreads();
+  // if (tx < N && ty < N) {
+  //   printf("c0[%d, %d]=%f\n", ty, tx, c0[ty][tx]);
+  // }
+  // 1. Evaluate u(x_q) (dofs -> c2)
+  // 1.1 c0[N][N][N] -> c1[N][N][Q]
+  if (ty < N - tz && tz < N) { // tz := alpha1, ty := alpha2, tx := i3
+    for (int alpha3 = 0; alpha3 < N - ty; ++alpha3) {
+      // B_alpha3^{p - alpha1 - alpha2}(t0)
+      c1[tz][ty][tx] += phi_0_N[(N - 1 - tz - ty) * Q * N + tx * N + alpha3] *
+                        c0[tz][ty][alpha3];
+    }
+    // printf("c1[%d, %d]=%f\n", ty, tx, c1[ty][tx]);
+  }
+
+  __syncthreads();
+
+  // 1.2 c1[N][N][Q] -> c2[N][Q][Q]
+  // tz := alpha1, ty := i2, tx := i3
+  {
+    if (tz < N) {
+      for (int alpha2 = 0; alpha2 < N - tz; ++alpha2) {
+        c2[tz][ty][tx] += phi_1_N[(N - 1 - tz) * Q * N + ty * N + alpha2] *
+                          c1[tz][alpha2][tx];
+      }
+    }
+  }
+  __syncthreads();
+
+  // 1.3 c2[N][Q][Q] -> c3[Q][Q][Q]
+  // tz := i1, ty := i2, tx := i3
+  T qval = 0.;
+  {
+    for (int alpha1 = 0; alpha1 < N; ++alpha1) {
+      qval += phi_2[tz * N + alpha1] * c2[alpha1][ty][tx];
+    }
+  }
+
+  // 2. Apply geometry
+  c3[tz][ty][tx] = alpha * qval * detJ_abs;
+  // printf("qvals[%d, %d]=%f\n", ty, tx, qvals[ty][tx]);
+  // printf("qvals[%d, %d, %d]=%f\n", tz, ty, tx, qval);
+  __syncthreads();
+
+  // 3. Compute Moments (qvals -> dofs)
+  T(&f0)[Q][Q][Q] = c3; // qqq
+  T(&f1)[N][Q][Q] = c2; // nqq
+  T(&f2)[N][N][Q] = c1; // nnq
+  T(&f3)[N][N][N] = c0; // nnn
+
+  if (tz < N && ty < N && tx < N)
+    f3[tz][ty][tx] = 0.;
+  if (ty < N && tz < N)
+    f2[tz][ty][tx] = 0.;
+  if (tz < N)
+    f1[tz][ty][tx] = 0.;
+  __syncthreads();
+  // 3.1 f0[Q][Q][Q] -> f1[N][Q][Q]
+  // tz := alpha1, ty := i2, tx := i3
+  {
+    if (tz < N) {
+      for (int i1 = 0; i1 < Q; ++i1) {
+        T w = qwts2_d<T, Q>[i1];
+        f1[tz][ty][tx] += w * phi_2[i1 * N + tz] * f0[i1][ty][tx];
+      }
+    }
+  }
+  __syncthreads();
+
+  // 3.2 f1[N][Q][Q] -> f2[N][N][Q]
+  // tz := alpha1, ty := alpha2, tx := i3
+  {
+    if (tz < N && ty < N) {
+      for (int i2 = 0; i2 < Q; ++i2) {
+        T w = qwts1_d<T, Q>[i2];
+        f2[tz][ty][tx] += w * phi_1_N[(N - 1 - tz) * Q * N + i2 * N + ty] * f1[tz][i2][tx];
+      }
+    }
+  }
+  __syncthreads();
+
+  // 3.3 f2[N][N][Q] -> f3[N][N][N]
+  // tz := alpha1, ty := alpha2, tx := alpha3
+  {
+    if (tz < N && ty < N && tx < N) {
+      for (int i3 = 0; i3 < Q; ++i3) {
+        T w = qwts0_d<T, Q>[i3];
+        f3[tz][ty][tx] += w * phi_0_N[(N - 1 - tz - ty) * Q * N + i3 * N + tx] * f2[tz][ty][i3];
       }
     }
   }
