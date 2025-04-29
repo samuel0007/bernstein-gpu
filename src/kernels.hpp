@@ -387,7 +387,7 @@ __launch_bounds__(Q *Q *Q) __global__
         }
         f1[tz][ty][tx] += w * f0[i1][ty][tx];
       }
-      printf("f1[%d, %d, %d]=%f\n", tz, ty, tx, f1[tz][ty][tx]);
+      // printf("f1[%d, %d, %d]=%f\n", tz, ty, tx, f1[tz][ty][tx]);
     }
   }
   __syncthreads();
@@ -611,6 +611,20 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   __shared__ T scratch1[N * N * N];
   __shared__ T scratch2[N * N * N];
 
+  // Load tables in shared memory
+  __shared__ T phi_0_N_s[N][Q][N];
+  __shared__ T phi_1_N_s[N][Q][N];
+  __shared__ T phi_2_s[Q][N];
+
+  if( tz < N && tx < N) {
+    phi_0_N_s[tz][ty][tx] = phi_0_N[tz * Q * N + ty * N + tx];
+    phi_1_N_s[tz][ty][tx] = phi_1_N[tz * Q * N + ty * N + tx];
+  }
+  if(tz == 0 && tx < N) {
+    phi_2_s[ty][tx] = phi_2[ty * N + tx];
+  }
+
+
   T(&c0)[N * N * N] = scratch1; // nnn
 
   if (tz < N && ty < N && tx < N)
@@ -629,7 +643,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     T lc1 = 0.;
     for (int alpha3 = 0; alpha3 < N - ty; ++alpha3) {
       // B_alpha3^{p - alpha1 - alpha2}(t0)
-      lc1 += phi_0_N[(N - 1 - tz - ty) * Q * N + tx * N + alpha3] *
+      lc1 += phi_0_N_s[(N - 1 - tz - ty)][tx][alpha3] *
              c0[ijk<N * N, N, 1>(tz, ty, alpha3)];
     }
     c1[ijk<N * Q, Q, 1>(tz, ty, tx)] = lc1;
@@ -643,7 +657,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     if (tz < N) {
       T lc2 = 0.;
       for (int alpha2 = 0; alpha2 < N - tz; ++alpha2) {
-        lc2 += phi_1_N[(N - 1 - tz) * Q * N + ty * N + alpha2] *
+        lc2 += phi_1_N_s[(N - 1 - tz)][ty][alpha2] *
                c1[ijk<N * Q, Q, 1>(tz, alpha2, tx)];
       }
       c2[ijk<Q * Q, Q, 1>(tz, ty, tx)] = lc2;
@@ -656,7 +670,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   T(&c3)[N * N * N] = scratch2; // qqq
   T lc3 = 0.;
   for (int alpha1 = 0; alpha1 < N; ++alpha1) {
-    lc3 += phi_2[tz * N + alpha1] * c2[ijk<Q * Q, Q, 1>(alpha1, ty, tx)];
+    lc3 += phi_2_s[tz][alpha1] * c2[ijk<Q * Q, Q, 1>(alpha1, ty, tx)];
   }
 
   // 2. Apply geometry
@@ -668,7 +682,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   // 3. Compute Moments (qvals -> dofs)
   T(&f0)[N * N * N] = c3; // qqq
 
-  printf("f0[%d, %d, %d]=%f\n", tz, ty, tx, f0[ijk<Q * Q, Q, 1>(tz, ty, tx)]);
+  // printf("f0[%d, %d, %d]=%f\n", tz, ty, tx, f0[ijk<Q * Q, Q, 1>(tz, ty, tx)]);
   // 3.1 f0[Q][Q][Q] -> f1[N][Q][Q], scratch2 -> scratch1
   T(&f1)[N * N * N] = scratch1; // nqq
 
@@ -678,7 +692,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
       T lf1 = 0.;
       for (int i1 = 0; i1 < Q; ++i1) {
         T w = qwts2_d<T, Q>[i1];
-        lf1 += w * phi_2[i1 * N + tz] * f0[ijk<Q * Q, Q, 1>(i1, ty, tx)];
+        lf1 += w * phi_2_s[i1][tz] * f0[ijk<Q * Q, Q, 1>(i1, ty, tx)];
       }
       f1[ijk<Q * Q, Q, 1>(tz, ty, tx)] = lf1;
       // printf("f1[%d, %d, %d]=%f\n", tz, ty, tx, f1[tz][ty][tx]);
@@ -696,7 +710,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
       for (int i2 = 0; i2 < Q; ++i2) {
         T w = qwts1_d<T, Q>[i2];
         lf2 +=
-            w * phi_1_N[(N - 1 - tz) * Q * N + i2 * N + ty] * f1[ijk<Q * Q, Q, 1>(tz, i2, tx)];
+            w * phi_1_N_s[(N - 1 - tz)][i2][ty] * f1[ijk<Q * Q, Q, 1>(tz, i2, tx)];
       }
       f2[ijk<N * Q, Q, 1>(tz, ty, tx)] = lf2;
     }
@@ -710,7 +724,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     if (tz < N && ty < N && tx < N) {
       for (int i3 = 0; i3 < Q; ++i3) {
         T w = qwts0_d<T, Q>[i3];
-        lf3 += w * phi_0_N[(N - 1 - tz - ty) * Q * N + i3 * N + tx] *
+        lf3 += w * phi_0_N_s[(N - 1 - tz - ty)][i3][tx] *
                           f2[ijk<N * Q, Q, 1>(tz, ty, i3)];
       }
     }
