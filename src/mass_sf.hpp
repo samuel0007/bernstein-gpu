@@ -10,6 +10,21 @@
 
 namespace dolfinx::acc {
 
+template <typename T>
+std::vector<T> permute_columns(std::vector<T> table,
+                               std::vector<int> reordering, int Q) {
+  int n = reordering.size();
+  assert(table.size() == Q * n);
+  std::vector<T> out(Q * n);
+  for (int q = 0; q < Q; ++q) {
+    int row_offset = q * n;
+    for (int i = 0; i < n; ++i) {
+      out[row_offset + reordering[i]] = table[row_offset + i];
+    }
+  }
+  return out;
+}
+
 template <typename T, int P, int Q> class MatFreeMassSF {
 public:
   using value_type = T;
@@ -39,7 +54,7 @@ public:
     // bcells.size());
 
     auto element_p = this->V->element();
-    std::vector<int> dof_reordering = get_tp_ordering<P>(element_p);
+    std::vector<int> dof_reordering = get_tp_ordering2D<P>(element_p);
 
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
@@ -79,30 +94,36 @@ public:
     // Create 1D elements
     std::array<std::shared_ptr<basix::FiniteElement<T>>, P + 1>
         elems; // No default ctor
+    std::array<std::vector<int>, P + 1> reordering_N;
     for (int p = 0; p < P + 1; ++p) {
       elems[p] =
           std::make_shared<basix::FiniteElement<T>>(basix::create_element<T>(
               basix::element::family::P, basix::cell::type::interval, p,
               basix::element::lagrange_variant::bernstein,
               basix::element::dpc_variant::unset, (p == 0)));
+      reordering_N[p] = get_tp_ordering1D<T>(elems[p], p);
     }
+
+    // As basix doesnt expose dof reodering for bernstein, we do it manually.
 
     auto [phi_1, shape_1] = elems[P]->tabulate(0, qpts1, {qpts1.size(), 1});
     std::cout << std::format("phi_1 size = {}, qxn: {}x{}", phi_1.size(),
                              shape_1[1], shape_1[2])
               << std::endl;
     assert(shape_1[1] == Q && shape_1[2] == N);
+    phi_1 = permute_columns(phi_1, reordering_N[P], Q);
 
     std::vector<T> phi_0_N(
         N * Q * N,
         0.); // this could be more memory efficient (2x), but indexing?
     for (int p = 0; p < N; ++p) {
-      auto [phi_table_0_p, shape_0_p] =
+      auto [phi_0_p, shape_0_p] =
           elems[p]->tabulate(0, qpts0, {qpts0.size(), 1});
+      phi_0_p = permute_columns(phi_0_p, reordering_N[p], Q);
       assert(shape_0_p[1] == Q && shape_0_p[2] == p + 1);
       for (int q = 0; q < shape_0_p[1]; ++q) {
         for (int i = 0; i < shape_0_p[2]; ++i) {
-          phi_0_N[i + q * N + p * Q * N] = phi_table_0_p[i + q * shape_0_p[2]];
+          phi_0_N[i + q * N + p * Q * N] = phi_0_p[i + q * shape_0_p[2]];
         }
       }
     }
@@ -221,7 +242,7 @@ public:
     // bcells.size());
 
     // auto element_p = this->V->element();
-    // std::vector<int> dof_reordering = get_tp_ordering<P>(element_p);
+    // std::vector<int> dof_reordering = get_tp_ordering2D<P>(element_p);
 
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
@@ -263,15 +284,20 @@ public:
     // Create 1D elements
     std::array<std::shared_ptr<basix::FiniteElement<T>>, P + 1>
         elems; // No default ctor
+    std::array<std::vector<int>, P + 1> reordering_N;
+
     for (int p = 0; p < P + 1; ++p) {
       elems[p] =
           std::make_shared<basix::FiniteElement<T>>(basix::create_element<T>(
               basix::element::family::P, basix::cell::type::interval, p,
               basix::element::lagrange_variant::bernstein,
               basix::element::dpc_variant::unset, (p == 0)));
+      reordering_N[p] = get_tp_ordering1D<T>(elems[p], p);
     }
 
     auto [phi_2, shape_2] = elems[P]->tabulate(0, qpts2, {qpts2.size(), 1});
+    phi_2 = permute_columns(phi_2, reordering_N[P], Q);
+
     std::cout << std::format("phi_2 size = {}, qxn: {}x{}", phi_2.size(),
                              shape_2[1], shape_2[2])
               << std::endl;
@@ -281,12 +307,14 @@ public:
         N * Q * N,
         0.); // this could be more memory efficient (2x), but indexing?
     for (int p = 0; p < N; ++p) {
-      auto [phi_table_1_p, shape_1_p] =
+      auto [phi_1_p, shape_1_p] =
           elems[p]->tabulate(0, qpts1, {qpts1.size(), 1});
+      phi_1_p = permute_columns(phi_1_p, reordering_N[p], Q);
+
       assert(shape_1_p[1] == Q && shape_1_p[2] == p + 1);
       for (int q = 0; q < shape_1_p[1]; ++q) {
         for (int i = 0; i < shape_1_p[2]; ++i) {
-          phi_1_N[i + q * N + p * Q * N] = phi_table_1_p[i + q * shape_1_p[2]];
+          phi_1_N[i + q * N + p * Q * N] = phi_1_p[i + q * shape_1_p[2]];
         }
       }
     }
@@ -298,12 +326,13 @@ public:
         N * Q * N,
         0.); // this could be more memory efficient (2x), but indexing?
     for (int p = 0; p < N; ++p) {
-      auto [phi_table_0_p, shape_0_p] =
+      auto [phi_0_p, shape_0_p] =
           elems[p]->tabulate(0, qpts0, {qpts0.size(), 1});
+      phi_0_p = permute_columns(phi_0_p, reordering_N[p], Q);
       assert(shape_0_p[1] == Q && shape_0_p[2] == p + 1);
       for (int q = 0; q < shape_0_p[1]; ++q) {
         for (int i = 0; i < shape_0_p[2]; ++i) {
-          phi_0_N[i + q * N + p * Q * N] = phi_table_0_p[i + q * shape_0_p[2]];
+          phi_0_N[i + q * N + p * Q * N] = phi_0_p[i + q * shape_0_p[2]];
         }
       }
     }
@@ -328,7 +357,7 @@ public:
 
     // Precompute geometry data on cpu at collapsed quadrature points, and
     // copy it on the gpu
-    std::vector<T> detJ_geom = compute_geometry(mesh, qptsT);
+    std::vector<T> detJ_geom = compute_geometry(mesh, qptsT, 3);
 
     this->detJ_geom_d.resize(detJ_geom.size());
     thrust::copy(detJ_geom.begin(), detJ_geom.end(), detJ_geom_d.begin());

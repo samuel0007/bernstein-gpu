@@ -4,7 +4,7 @@ option(cpu "Build for CPUs"	off)
 option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
-set(polynomial_degree 9)
+set(polynomial_degree 2 CACHE STRING "Polynomial degree")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 
 if(cpu AND nvidia OR cpu AND amd)

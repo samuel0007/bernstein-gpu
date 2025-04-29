@@ -172,8 +172,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   la::Vector<T> x(map, map_bs);
 
   for (double i = 0; i < ndofs_local; ++i) {
-    // x.mutable_array()[i] = sin(i / ndofs_local);
-    x.mutable_array()[i] = 1.;
+    x.mutable_array()[i] = sin(i / ndofs_local);
+    // x.mutable_array()[i] = 1.;
   }
 
   // GPU

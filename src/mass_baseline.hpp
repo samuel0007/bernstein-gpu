@@ -39,7 +39,6 @@ public:
     // bcells.size());
 
     auto element_p = this->V->element();
-    // std::vector<int> dof_reordering = get_tp_ordering<P>(element_p);
 
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
@@ -192,7 +191,6 @@ public:
     // bcells.size());
 
     auto element_p = this->V->element();
-    // std::vector<int> dof_reordering = get_tp_ordering<P>(element_p);
 
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
@@ -268,7 +266,7 @@ public:
     constexpr int N = P + 1;
     constexpr int nd = N * (N + 1) * (N + 2) /
                        6; // Number of dofs on tets (is always smaller than nq)
-    constexpr int nq = 4 * (P == 1) * 14 * (P == 2) + 24 * (P == 3) +
+    constexpr int nq = 4 * (P == 1) + 14 * (P == 2) + 24 * (P == 3) +
                        45 * (P == 4) + 74 * (P == 5) + 122 * (P == 6) +
                        177 * (P == 7) + 729 * (P == 8) + 1000 * (P == 9) +
                        1331 * (P == 10) + 96 * (P == 11) + 112 * (P == 12);

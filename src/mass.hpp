@@ -39,7 +39,7 @@ public:
     // bcells.size());
 
     auto element_p = this->V->element();
-    std::vector<int> dof_reordering = get_tp_ordering<P>(element_p);
+    std::vector<int> dof_reordering = get_tp_ordering2D<P>(element_p);
 
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();

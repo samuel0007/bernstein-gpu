@@ -29,9 +29,9 @@ using T = PetscScalar;
 using U = typename dolfinx::scalar_value_type_t<T>;
 
 #if USE_HIP
-using DeviceVector = dolfinx::acc::Vector<T, acc::Device::HIP>;
+using DeviceVector = dolfinx::acc::Vector<U, acc::Device::HIP>;
 #elif USE_CUDA
-using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
+using DeviceVector = dolfinx::acc::Vector<U, acc::Device::CUDA>;
 #else
 static_assert(false)
 #endif
@@ -65,7 +65,7 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
   desc.add_options()("help,h", "print usage message")
       ("nelements", po::value<int>()->default_value(1), "Number of elements (1D)")
       ("nreps", po::value<int>()->default_value(1), "number of repetitions")
-      ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator");
+      ("matrix_comparison", po::bool_switch()->default_value(false), "Compare result to CPU matrix operator");
   // clang-format on
 
   po::variables_map vm;
@@ -129,9 +129,9 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   // if (rank == 0)
   {
     std::string fp_type = "float";
-    if (std::is_same_v<T, float>)
+    if (std::is_same_v<U, float>)
       fp_type += "32";
-    else if (std::is_same_v<T, double>)
+    else if (std::is_same_v<U, double>)
       fp_type += "64";
 
     constexpr int N = polynomial_degree + 1;

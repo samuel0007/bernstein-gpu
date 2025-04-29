@@ -129,7 +129,7 @@ __launch_bounds__(Q *Q) __global__
     }
 
     f1[tx][ty] = f1val;
-    printf("f1[%d, %d]=%f\n", tx, ty, f1[tx][ty]);
+    // printf("f1[%d, %d]=%f\n", tx, ty, f1[tx][ty]);
   }
 
   __syncthreads();
@@ -382,6 +382,7 @@ __launch_bounds__(Q *Q *Q) __global__
         }
         f1[tz][ty][tx] += w * f0[i1][ty][tx];
       }
+      // printf("f1[%d, %d, %d]=%f\n", tz, ty, tx, f1[tz][ty][tx]);
     }
   }
   __syncthreads();
@@ -515,7 +516,7 @@ __launch_bounds__(Q *Q) __global__
 
   // 2. Apply geometry
   c2[ty][tx] = alpha * qval * detJ_abs;
-  // printf("qvals[%d, %d]=%f\n", ty, tx, qvals[ty][tx]);
+  // printf("qvals[%d, %d]=%f\n", ty, tx, c2[ty][tx]);
   // printf("qvals[%d, %d]=%f\n", ty, tx, qval);
   __syncthreads();
 
@@ -663,7 +664,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   // 2. Apply geometry
   c3[tz][ty][tx] = alpha * qval * detJ_abs;
   // printf("qvals[%d, %d]=%f\n", ty, tx, qvals[ty][tx]);
-  // printf("qvals[%d, %d, %d]=%f\n", tz, ty, tx, qval);
+  // printf("detJ_abs[%d, %d, %d]=%f\n", tz, ty, tx, detJ_abs);
   __syncthreads();
 
   // 3. Compute Moments (qvals -> dofs)
@@ -680,6 +681,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     f1[tz][ty][tx] = 0.;
   __syncthreads();
   // 3.1 f0[Q][Q][Q] -> f1[N][Q][Q]
+  // printf("f0[%d, %d, %d]=%f\n", tz, ty, tx, f0[tz][ty][tx]);
   // tz := alpha1, ty := i2, tx := i3
   {
     if (tz < N) {
@@ -687,6 +689,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
         T w = qwts2_d<T, Q>[i1];
         f1[tz][ty][tx] += w * phi_2[i1 * N + tz] * f0[i1][ty][tx];
       }
+      // printf("f1[%d, %d, %d]=%f\n", tz, ty, tx, f1[tz][ty][tx]);
     }
   }
   __syncthreads();
@@ -697,7 +700,8 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     if (tz < N && ty < N) {
       for (int i2 = 0; i2 < Q; ++i2) {
         T w = qwts1_d<T, Q>[i2];
-        f2[tz][ty][tx] += w * phi_1_N[(N - 1 - tz) * Q * N + i2 * N + ty] * f1[tz][i2][tx];
+        f2[tz][ty][tx] +=
+            w * phi_1_N[(N - 1 - tz) * Q * N + i2 * N + ty] * f1[tz][i2][tx];
       }
     }
   }
@@ -709,7 +713,8 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     if (tz < N && ty < N && tx < N) {
       for (int i3 = 0; i3 < Q; ++i3) {
         T w = qwts0_d<T, Q>[i3];
-        f3[tz][ty][tx] += w * phi_0_N[(N - 1 - tz - ty) * Q * N + i3 * N + tx] * f2[tz][ty][i3];
+        f3[tz][ty][tx] += w * phi_0_N[(N - 1 - tz - ty) * Q * N + i3 * N + tx] *
+                          f2[tz][ty][i3];
       }
     }
   }
