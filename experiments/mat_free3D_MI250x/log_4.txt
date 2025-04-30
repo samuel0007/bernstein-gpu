@@ -17,28 +17,28 @@ Number of cells-global: 6000
 Number of dofs-global: 68921
 Number of dofs-local: 68921
 Number of repetitions: 500
-Scalar Type: float32
+Scalar Type: float64
 -----------------------------------
 Sent dofmap to GPU (size = 840000 bytes)
-Sent alpha to GPU (size = 24000 bytes)
+Sent alpha to GPU (size = 48000 bytes)
 start computing geometry...
 finished computing geometry.
-Send geometry to GPU (size = 3000000 bytes)
+Send geometry to GPU (size = 6000000 bytes)
 Sent dofmap to GPU (size = 840000 bytes)
-Sent alpha to GPU (size = 24000 bytes)
+Sent alpha to GPU (size = 48000 bytes)
 phi_2 size = 25, qxn: 5x5
 phi_1_N size = 125, nxqxn: 5x5x5
 phi_0_N size = 125, nxqxn: 5x5x5
-Send geometry to GPU (size = 3000000 bytes)
+Send geometry to GPU (size = 6000000 bytes)
 Sent dofmap to GPU (size = 840000 bytes)
-Sent alpha to GPU (size = 24000 bytes)
+Sent alpha to GPU (size = 48000 bytes)
 Table size = 1575, qxn: 45x35
-Send geometry to GPU (size = 1080000 bytes)
+Send geometry to GPU (size = 2160000 bytes)
 norm(x_d)=262.528
-Baseline Mat-free Matvec time: 0.0312306
-Baseline Mat-free action Gdofs/s: 1.10342
-SF OTF Mat-free Matvec time: 0.0856609
-SF OTF Mat-free action Gdofs/s: 0.40229
-SF Mat-free Matvec time: 0.0187349
-SF Mat-free action Gdofs/s: 1.83937
-norm(y_d)=0.00542478
+Baseline Mat-free Matvec time: 0.0476772
+Baseline Mat-free action Gdofs/s: 0.722788
+SF OTF Mat-free Matvec time: 0.0901738
+SF OTF Mat-free action Gdofs/s: 0.382157
+SF Mat-free Matvec time: 0.023595
+SF Mat-free action Gdofs/s: 1.4605
+norm(y_d)=0.00542479
