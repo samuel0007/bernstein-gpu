@@ -1,0 +1,120 @@
+spack:
+  compilers:
+  - compiler:
+      spec: gcc@=14.1.0
+      paths:
+        cc: /cosma/local/gcc/14.1.0/bin/gcc
+        cxx: /cosma/local/gcc/14.1.0/bin/g++
+        f77: /cosma/local/gcc/14.1.0/bin/gfortran
+        fc: /cosma/local/gcc/14.1.0/bin/gfortran
+      flags: {}
+      operating_system: rocky9
+      target: x86_64
+      modules: [gnu_comp/14.1.0, binutils/2.40]
+      environment: {}
+      extra_rpaths: []
+  packages:
+    autoconf:
+      externals:
+      - spec: autoconf@2.69
+        prefix: /usr
+      buildable: False
+    openmpi:
+      externals:
+      - spec: openmpi@5.0.3
+        modules: ["gnu_comp/14.1.0", "openmpi/5.0.3"]
+      buildable: False
+    hip:
+      externals:
+      - spec: hip@6.2.4
+        prefix: /opt/rocm
+        extra_attributes:
+          compilers:
+            c: /opt/rocm/llvm/bin/clang
+            c++: /opt/rocm/llvm/bin/clang++
+            hip: /opt/rocm/bin/hipcc
+      buildable: false
+    hsa-rocr-dev:
+      externals:
+      - spec: hsa-rocr-dev@6.2.4
+        prefix: /opt/rocm
+        extra_attributes:
+          compilers:
+            c: /opt/rocm/llvm/bin/clang
+            cxx: /opt/rocm/llvm/bin/clang++
+      buildable: false
+    llvm-amdgpu:
+      externals:
+      - spec: llvm-amdgpu@6.2.4
+        prefix: /opt/rocm/llvm
+        extra_attributes:
+          compilers:
+            c: /opt/rocm/llvm/bin/clang
+            cxx: /opt/rocm/llvm/bin/clang++
+            fortan: /opt/rocm/llvm/bin/amdflang
+      buildable: false
+    rocsolver:
+      externals:
+      - spec: rocsolver@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    hipblas:
+      externals:
+      - spec: hipblas@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    hipsparse:
+      externals:
+      - spec: hipsparse@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    hipsolver:
+      externals:
+      - spec: hipsolver@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    rocblas:
+      externals:
+      - spec: rocblas@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    rocsparse:
+      externals:
+      - spec: rocsparse@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    rocrand:
+      externals:
+      - spec: rocrand@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    rocprim:
+      externals:
+      - spec: rocprim@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    rocthrust:
+      externals:
+      - spec: rocthrust@6.2.4
+        prefix: /opt/rocm
+      buildable: false
+    zlib-ng:
+      variants: ~opt
+    hypre:
+      variants: +rocm amdgpu_target=gfx942
+    petsc:
+      variants: +hypre+rocm amdgpu_target=gfx942
+    all:
+      compiler: [gcc@14.1.0]
+      providers:
+        mpi: [openmpi@5.0.3]
+        blas: [hipblas]
+        lapack: [hipsolver]
+  view: true
+  specs:
+  - fenics-dolfinx ^petsc +hypre+rocm amdgpu_target=gfx942
+  - py-fenics-ffcx
+  - cmake
+  - hip
+  - rocthrust
+  - mpi
