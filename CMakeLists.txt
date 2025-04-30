@@ -1,8 +1,8 @@
 cmake_minimum_required(VERSION 3.19)
 
 option(cpu "Build for CPUs"	off)
-option(nvidia "Build for NVidia GPUs" on)
-option(amd "Build for AMD GPUs"	off)
+option(nvidia "Build for NVidia GPUs" off)
+option(amd "Build for AMD GPUs"	on)
 
 set(polynomial_degree 2 CACHE STRING "Polynomial degree")
 set(scalar_type "float32" CACHE STRING "Scalar type")
@@ -42,7 +42,8 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(amd)
-  set(CMAKE_HIP_ARCHITECTURES gfx90a gfx942 gfx1100)
+  # set(CMAKE_HIP_ARCHITECTURES gfx90a gfx942 gfx1100)
+  set(CMAKE_HIP_ARCHITECTURES gfx90a)
   enable_language(HIP)
 elseif(nvidia)
   # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
@@ -58,8 +59,8 @@ endif()
 set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -std=c++20 -Wall -Ofast -DNDEBUG -munsafe-fp-atomics")
 
 if (DEFINED ENV{CRAYPE_VERSION})
-   message("Detected CrayPE - adding MPI flags")
-   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -Ofast -march=native -I/opt/cray/pe/mpich/8.1.27/ofi/gnu/9.1/include")
+  message("Detected CrayPE - adding MPI flags")
+  set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -Ofast -march=native -I/opt/cray/pe/mpich/8.1.27/ofi/gnu/9.1/include")
 endif()
 
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")

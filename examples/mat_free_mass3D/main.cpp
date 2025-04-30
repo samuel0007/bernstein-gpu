@@ -108,10 +108,10 @@ void solver(MPI_Comm comm, po::variables_map vm) {
       basix::element::dpc_variant::unset, true);
 
   auto V = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, element, {}));
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element)));
 
   auto V_DG = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, element_DG, {}));
+    fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element_DG)));
 
   auto alpha = std::make_shared<fem::Function<U>>(V_DG);
   alpha->x()->set(1.0);

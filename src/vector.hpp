@@ -351,7 +351,7 @@ auto inner_product(const Vector& a, const Vector& b)
 
   T result;
   
-  MPI_Allreduce(&local, &result, 1, dolfinx::MPI::mpi_type<T>(), MPI_SUM, a.map()->comm());
+  MPI_Allreduce(&local, &result, 1, dolfinx::MPI::mpi_t<T>, MPI_SUM, a.map()->comm());
   return result;
 }
 
@@ -385,8 +385,8 @@ auto norm(const Vector& a, dolfinx::la::Norm type = dolfinx::la::Norm::l2)
     auto max_pos = thrust::max_element(thrust::device, x_a.begin(), x_a.end());
     auto local_linf = std::abs(*max_pos);
     decltype(local_linf) linf = 0;
-    MPI_Allreduce(&local_linf, &linf, 1, dolfinx::MPI::mpi_type<decltype(linf)>()
-    , MPI_MAX, a.map()->comm());
+    MPI_Allreduce(&local_linf, &linf, 1, dolfinx::MPI::mpi_t<decltype(linf)>, MPI_MAX,
+                  a.map()->comm());
     return linf;
   }
   default:
