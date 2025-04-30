@@ -12,7 +12,7 @@
 #include <petscsystypes.h>
 
 #include "src/geometry.hpp"
-#include "src/mass3D.hpp"
+#include "src/mass.hpp"
 #include "src/mass_sf.hpp"
 #include "src/mass_baseline.hpp"
 #include "src/mesh.hpp"
@@ -25,8 +25,9 @@
 using namespace dolfinx;
 namespace po = boost::program_options;
 
-using T = PetscScalar;
-using U = typename dolfinx::scalar_value_type_t<T>;
+// using T = PetscScalar;
+using U = SCALAR_TYPE;
+// using U = typename dolfinx::scalar_value_type_t<T>;
 
 #if USE_HIP
 using DeviceVector = dolfinx::acc::Vector<U, acc::Device::HIP>;
@@ -112,14 +113,14 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   auto V_DG = std::make_shared<fem::FunctionSpace<U>>(
       fem::create_functionspace(mesh, element_DG, {}));
 
-  auto alpha = std::make_shared<fem::Function<T>>(V_DG);
+  auto alpha = std::make_shared<fem::Function<U>>(V_DG);
   alpha->x()->set(1.0);
 
   // Action of the bilinear form "a" on a function ui
-  auto ui = std::make_shared<fem::Function<T, U>>(V);
-  auto M = std::make_shared<fem::Form<T, U>>(
-      fem::create_form<T>(*form_mat_free_mass3D_M, {V},
-                          {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
+  // auto ui = std::make_shared<fem::Function<T, U>>(V);
+  // auto M = std::make_shared<fem::Form<T, U>>(
+  //     fem::create_form<T>(*form_mat_free_mass3D_M, {V},
+  //                         {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
 
   const std::size_t tdim = mesh->topology()->dim();
   std::size_t ncells = mesh->topology()->index_map(tdim)->size_global();
@@ -198,6 +199,17 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i) {
+      gpu_action(x_d, y_d);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = stop - start;
+    std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "SF OTF Mat-free action Gdofs/s: "
+              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  }
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < nreps; ++i) {
       gpu_action_sf(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
@@ -207,70 +219,60 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::cout << "SF Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
-  // {
-  //   auto start = std::chrono::high_resolution_clock::now();
-  //   for (int i = 0; i < nreps; ++i) {
-  //     gpu_action(x_d, y_d);
-  //   }
-  //   auto stop = std::chrono::high_resolution_clock::now();
-  //   std::chrono::duration<double> duration = stop - start;
-  //   std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
-  //   std::cout << "SF OTF Mat-free action Gdofs/s: "
-  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-  // }
 
   std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
-  if (matrix_comparison) {
-    la::Vector<T> y_h(map, map_bs);
-    thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
-                 y_h.mutable_array().begin());
+  // if (matrix_comparison) {
+  //   la::Vector<T> y_h(map, map_bs);
+  //   thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
+  //                y_h.mutable_array().begin());
 
-    // ----------- 2. CPU Matrix Free setup -----------
-    auto coeff = fem::allocate_coefficient_storage(*M);
-    std::vector<T> constants = fem::pack_constants(*M);
+  //   // ----------- 2. CPU Matrix Free setup -----------
+  //   auto coeff = fem::allocate_coefficient_storage(*M);
+  //   std::vector<T> constants = fem::pack_constants(*M);
 
-    // Create function for computing the action of A on x (y = Ax)
-    auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
-      y.set(0.0);
+  //   // Create function for computing the action of A on x (y = Ax)
+  //   auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
+  //     y.set(0.0);
 
-      // Update coefficient ui (just copy data from x to ui)
-      std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
+  //     // Update coefficient ui (just copy data from x to ui)
+  //     std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
 
-      // Compute action of A on x
-      fem::pack_coefficients(*M, coeff);
-      fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
-                           fem::make_coefficients_span(coeff));
+  //     // Compute action of A on x
+  //     fem::pack_coefficients(*M, coeff);
+  //     fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
+  //                          fem::make_coefficients_span(coeff));
 
-      // // Accumulate ghost values
-      // y.scatter_rev(std::plus<T>());
+  //     // // Accumulate ghost values
+  //     // y.scatter_rev(std::plus<T>());
 
-      // // Update ghost values
-      // y.scatter_fwd();
-    };
+  //     // // Update ghost values
+  //     // y.scatter_fwd();
+  //   };
 
-    la::Vector<T> y(map, map_bs);
-    y.set(0.);
-    std::cout << "norm(x)=" << la::norm(x) << "\n";
-    cpu_action(x, y);
-    std::cout << "norm(y)=" << la::norm(y) << "\n";
-    double eps = 1e-6;
-    bool check = true;
-    for (int i = 0; i < ndofs_local; ++i) {
-      // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i,
-      // y.array()[i], i, y_h.array()[i]);
-      if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
-        check = false;
-      }
-    }
-    std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
-  }
+  //   la::Vector<T> y(map, map_bs);
+  //   y.set(0.);
+  //   std::cout << "norm(x)=" << la::norm(x) << "\n";
+  //   cpu_action(x, y);
+  //   std::cout << "norm(y)=" << la::norm(y) << "\n";
+  //   double eps = 1e-6;
+  //   bool check = true;
+  //   for (int i = 0; i < ndofs_local; ++i) {
+  //     // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i,
+  //     // y.array()[i], i, y_h.array()[i]);
+  //     if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
+  //       check = false;
+  //     }
+  //   }
+  //   std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
+  // }
 }
 
 /// Main program
 int main(int argc, char *argv[]) {
   using T = PetscScalar;
-  using U = typename dolfinx::scalar_value_type_t<T>;
+  // using U = typename dolfinx::scalar_value_type_t<T>;
+  using U = SCALAR_TYPE;
   init_logging(argc, argv);
   MPI_Init(&argc, &argv);
   {

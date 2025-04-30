@@ -5,6 +5,7 @@ option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
 set(polynomial_degree 2 CACHE STRING "Polynomial degree")
+set(scalar_type "float32" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 
 if(cpu AND nvidia OR cpu AND amd)
@@ -22,6 +23,15 @@ elseif(amd)
   message(STATUS "Compiling for AMD GPUs")
 else()
   message(FATAL_ERROR "No target selected for the build. Please select one of the three options: cpu, nvidia, amd")
+endif()
+
+
+if (scalar_type STREQUAL "float32")
+  add_definitions(-DSCALAR_TYPE=float)
+elseif(scalar_type STREQUAL "float64")
+  add_definitions(-DSCALAR_TYPE=double)
+else()
+  message(FATAL_ERROR "Scalar type ${SCALAR_TYPE} not supported.")
 endif()
 
 
