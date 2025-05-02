@@ -3,22 +3,27 @@ import numpy as np
 import re
 
 def parse_log_file(filename):
-    measured = np.nan
+    sf_otf = np.nan
+    sf = np.nan
     baseline = np.nan
     with open(filename, 'r') as f:
         for line in f:
-            m1 = re.search(r'Mat-free action Gdofs/s:\s*([0-9.]+)', line)
+            m1 = re.search(r'SF OTF Mat-free action Gdofs/s:\s*([0-9.]+)', line)
             if m1:
-                measured = float(m1.group(1))
+                sf_otf = float(m1.group(1))
             m2 = re.search(r'Baseline Mat-free action Gdofs/s:\s*([0-9.]+)', line)
             if m2:
                 baseline = float(m2.group(1))
-    return measured, baseline
+            m3 = re.search(r'SF Mat-free action Gdofs/s:\s*([0-9.]+)', line)
+            if m3:
+                sf = float(m3.group(1))
+    return sf, sf_otf, baseline
 
 P = list(range(2, 12))
-meas, base = zip(*(parse_log_file(f'log_{i}.txt') for i in P))
+sf, sf_otf, base = zip(*(parse_log_file(f'log_{i}.txt') for i in P))
 
-plt.plot(P, meas, marker='o', label='Sum Facto')
+plt.plot(P, sf, marker='o', label='Sum Facto')
+plt.plot(P, sf_otf, marker='>', label='Sum Facto On the fly')
 plt.plot(P, base, linestyle='--', marker='x', label='Baseline')
 plt.xlabel('Polynomial order P')
 plt.ylabel('GDoFs/s')
