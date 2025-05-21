@@ -176,9 +176,16 @@ public:
     // bcells.size());
 
     // TODO
-    // auto element_p = this->V->element();
-    // std::vector<int> dof_reordering = get_tp_ordering2D<P>(element_p);
-
+    auto element_p = this->V->element();
+    std::vector<int> dof_reordering = lex_dof_ordering(
+        basix::element::family::P, basix::cell::type::tetrahedron, P);
+    // std::vector<int> dof_reordering = {0, 1, 2, 3};
+    // std::reverse(dof_reordering.begin(), dof_reordering.end());
+    for(int i = 0; i < dof_reordering.size(); ++i) {
+      std::cout << "i=" << dof_reordering[i] << "\n";
+    }
+    assert(dof_reordering.size() == K);
+    
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
     this->number_of_local_cells =
@@ -244,10 +251,10 @@ public:
                                    qpts1.size() * sizeof(T)));
     err_check(deviceMemcpyToSymbol((qpts2_d<T, Q>), qpts2.data(),
                                    qpts2.size() * sizeof(T)));
-    // // Copy dofmap reordering to the gpu
-    // err_check(deviceMemcpyToSymbol((dof_reordering_d<P + 1>),
-    // dof_reordering.data(),
-    //                                dof_reordering.size() * sizeof(int)));
+    // Copy dofmap reordering to the gpu
+    err_check(deviceMemcpyToSymbol((dof_reordering3d_d<N>),
+                                   dof_reordering.data(),
+                                   dof_reordering.size() * sizeof(int)));
   }
 
   template <typename Vector> void operator()(const Vector &in, Vector &out) {
@@ -258,8 +265,6 @@ public:
 
     dim3 grid_size(this->number_of_local_cells);
     dim3 block_size(Q, Q, Q);
-    constexpr int N = P + 1;
-    constexpr int K = N * (N + 1) * (N + 2) / 6; // Number of dofs on tet
 
     assert(dofmap_d_span.size() == this->number_of_local_cells * K);
     assert(in.array().size() == out.mutable_array().size());
@@ -277,6 +282,9 @@ public:
 
 private:
   // static constexpr int nq = Q * Q * Q;
+  static constexpr int N = P + 1;
+  static constexpr int K = N * (N + 1) * (N + 2) / 6;
+
   std::size_t number_of_local_cells;
 
   std::shared_ptr<mesh::Mesh<T>> mesh;

@@ -25,9 +25,9 @@
 using namespace dolfinx;
 namespace po = boost::program_options;
 
-// using T = PetscScalar;
-using U = SCALAR_TYPE;
-// using U = typename dolfinx::scalar_value_type_t<T>;
+using T = PetscScalar;
+// using U = SCALAR_TYPE;
+using U = typename dolfinx::scalar_value_t<T>;
 
 #if USE_HIP
 using DeviceVector = dolfinx::acc::Vector<U, acc::Device::HIP>;
@@ -41,32 +41,38 @@ static_assert(false)
 #define POLYNOMIAL_DEGREE 4
 #endif
 
-namespace linalg {
+namespace linalg
+{
 
-template <typename T> void copy(const la::Vector<T> &in, la::Vector<T> &out) {
-  std::span<const T> _in = in.array();
-  std::span<T> _out = out.mutable_array();
-  std::copy(_in.begin(), _in.end(), _out.begin());
-}
+  template <typename T>
+  void copy(const la::Vector<T> &in, la::Vector<T> &out)
+  {
+    std::span<const T> _in = in.array();
+    std::span<T> _out = out.mutable_array();
+    std::copy(_in.begin(), _in.end(), _out.begin());
+  }
 
-/// @brief Compute vector r = alpha * x + y.
-/// @param[out] r
-/// @param[in] alpha
-/// @param[in] x
-/// @param[in] y
-void axpy(auto &&r, auto alpha, auto &&x, auto &&y) {
-  std::ranges::transform(x.array(), y.array(), r.mutable_array().begin(),
-                         [alpha](auto x, auto y) { return alpha * x + y; });
-}
+  /// @brief Compute vector r = alpha * x + y.
+  /// @param[out] r
+  /// @param[in] alpha
+  /// @param[in] x
+  /// @param[in] y
+  void axpy(auto &&r, auto alpha, auto &&x, auto &&y)
+  {
+    std::ranges::transform(x.array(), y.array(), r.mutable_array().begin(),
+                           [alpha](auto x, auto y)
+                           { return alpha * x + y; });
+  }
 } // namespace linalg
 
-po::variables_map get_cli_config(int argc, char *argv[]) {
+po::variables_map get_cli_config(int argc, char *argv[])
+{
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
       ("nelements", po::value<int>()->default_value(1), "Number of elements (1D)")
       ("nreps", po::value<int>()->default_value(1), "number of repetitions")
-      ("matrix_comparison", po::bool_switch()->default_value(false), "Compare result to CPU matrix operator");
+      ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator");
   // clang-format on
 
   po::variables_map vm;
@@ -81,10 +87,12 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
 }
 
 template <typename T, std::floating_point U>
-void solver(MPI_Comm comm, po::variables_map vm) {
+void solver(MPI_Comm comm, po::variables_map vm)
+{
   constexpr int polynomial_degree = POLYNOMIAL_DEGREE;
   // BP1: p + 2 quadrature points
-  constexpr int quadrature_points = polynomial_degree + 2;
+  // constexpr int quadrature_points = polynomial_degree + 2;
+  constexpr int quadrature_points = polynomial_degree + 1;
 
   const int nelements = vm["nelements"].as<int>();
   const int nreps = vm["nreps"].as<int>();
@@ -110,16 +118,16 @@ void solver(MPI_Comm comm, po::variables_map vm) {
       fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element)));
 
   auto V_DG = std::make_shared<fem::FunctionSpace<U>>(
-    fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element_DG)));
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element_DG)));
 
   auto alpha = std::make_shared<fem::Function<U>>(V_DG);
   alpha->x()->set(1.0);
 
   // Action of the bilinear form "a" on a function ui
-  // auto ui = std::make_shared<fem::Function<T, U>>(V);
-  // auto M = std::make_shared<fem::Form<T, U>>(
-  //     fem::create_form<T>(*form_mat_free_mass3D_M, {V},
-  //                         {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
+  auto ui = std::make_shared<fem::Function<U>>(V);
+  auto M = std::make_shared<fem::Form<U>>(
+      fem::create_form<U>(*form_mat_free_mass3D_M, {V},
+                          {{"ui", ui}, {"alpha", alpha}}, {}, {}, {}));
 
   const std::size_t tdim = mesh->topology()->dim();
   std::size_t ncells = mesh->topology()->index_map(tdim)->size_global();
@@ -170,56 +178,66 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   // CPU
   la::Vector<T> x(map, map_bs);
-
-  for (double i = 0; i < ndofs_local; ++i) {
-    // x.mutable_array()[i] = sin(i / ndofs_local);
-    x.mutable_array()[i] = 1.;
-  }
-
   // GPU
   DeviceVector x_d(map, map_bs);
   DeviceVector y_d(map, map_bs);
   y_d.set(U{0.0});
-  x_d.copy_from_host(x);
-  std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
+  for (int j = 0; j < 10; ++j)
   {
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
-      gpu_action_baseline(x_d, y_d);
+    std::cout << "j=" << j << "\n";
+    for (double i = 0; i < ndofs_local; ++i)
+    {
+      // x.mutable_array()[i] = sin(i / ndofs_local);
+      // x.mutable_array()[i] = 1.;
+      x.mutable_array()[i] = 0;
     }
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = stop - start;
-    std::cout << "Baseline Mat-free Matvec time: " << duration.count()
-              << std::endl;
-    std::cout << "Baseline Mat-free action Gdofs/s: "
-              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-  }
-  {
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
-      gpu_action(x_d, y_d);
-    }
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = stop - start;
-    std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
-    std::cout << "SF OTF Mat-free action Gdofs/s: "
-              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-  }
-  {
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
-      gpu_action_sf(x_d, y_d);
-    }
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = stop - start;
-    std::cout << "SF Mat-free Matvec time: " << duration.count()
-              << std::endl;
-    std::cout << "SF Mat-free action Gdofs/s: "
-              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-  }
+    x.mutable_array()[j] = 1.;
 
-  std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
+  
+    x_d.copy_from_host(x);
+    std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
+
+    {
+      auto start = std::chrono::high_resolution_clock::now();
+      // for (int i = 0; i < nreps; ++i)
+      // {
+        gpu_action_baseline(x_d, y_d);
+      // }
+      auto stop = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> duration = stop - start;
+      std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+                << std::endl;
+      std::cout << "Baseline Mat-free action Gdofs/s: "
+                << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+    }
+    {
+      auto start = std::chrono::high_resolution_clock::now();
+      // for (int i = 0; i < nreps; ++i)
+      // {
+        gpu_action_sf(x_d, y_d);
+      // }
+      auto stop = std::chrono::high_resolution_clock::now();
+      std::chrono::duration<double> duration = stop - start;
+      std::cout << "SF Mat-free Matvec time: " << duration.count()
+                << std::endl;
+      std::cout << "SF Mat-free action Gdofs/s: "
+                << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+    }
+  }
+  // {
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (int i = 0; i < nreps; ++i) {
+  //     gpu_action(x_d, y_d);
+  //   }
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   std::chrono::duration<double> duration = stop - start;
+  //   std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
+  //   std::cout << "SF OTF Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  // }
+
+  // std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
   // if (matrix_comparison) {
   //   la::Vector<T> y_h(map, map_bs);
@@ -268,10 +286,11 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 }
 
 /// Main program
-int main(int argc, char *argv[]) {
+int main(int argc, char *argv[])
+{
   using T = PetscScalar;
-  // using U = typename dolfinx::scalar_value_type_t<T>;
-  using U = SCALAR_TYPE;
+  using U = typename dolfinx::scalar_value_t<T>;
+  // using U = SCALAR_TYPE;
   init_logging(argc, argv);
   MPI_Init(&argc, &argv);
   {

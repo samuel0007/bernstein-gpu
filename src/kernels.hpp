@@ -7,6 +7,8 @@ template <typename T, int Q> __constant__ T qwts1_d[Q];
 template <typename T, int Q> __constant__ T qpts1_d[Q];
 
 template <int N> __constant__ int dof_reordering_d[(N + 1) * N / 2];
+template <int N> __constant__ int dof_reordering3d_d[N * (N + 1) * (N + 2) / 6];
+
 
 template <int ld0, int ld1, int ld2>
 __device__ __forceinline__ int ijk(int i, int j, int k) {
@@ -197,6 +199,9 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
 
   qvals[tx] = alpha * qval * detJ_abs;
   __syncthreads();
+  // if(cell_idx == 0)
+  //   printf("qvals[%d]=%f \n", tx, qvals[tx]);
+
 
   if (tx < nd) {
     T fval = 0.;
@@ -204,6 +209,8 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
       fval += qvals[i] * phi[i * nd + tx];
     }
 
+    // if(cell_idx == 0)
+    //   printf("out_dof[%d]=%f \n", g_dof_idx, fval);
     atomicAdd(&out_dofs[g_dof_idx], fval);
   }
 
@@ -244,8 +251,8 @@ __launch_bounds__(Q *Q *Q) __global__
 
   const int cell_idx = blockIdx.x;
 
-  const int l_dof_idx =
-      tet_ijk(tz, ty, tx); // Only valid for ty < N - tz, tx < N - ty - tz
+  const int l_dof_idx = dof_reordering3d_d<N>[tet_ijk(tz, ty, tx)]; // Only valid for ty < N - tz, tx < N - ty - tz
+  // const int l_dof_idx = tet_ijk(tz, ty, tx); // Only valid for ty < N - tz, tx < N - ty - tz
   int g_dof_idx = -1;
 
   T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
@@ -351,10 +358,11 @@ __launch_bounds__(Q *Q *Q) __global__
 
   // 2. Apply geometry
   c3[tz][ty][tx] = alpha * qval * detJ_abs;
-  // if (cell_idx == 0)
-  // printf("qvals[%d, %d, %d]=%f\n", tz, ty, tx, qval);
-  // printf("qvals[%d, %d, %d]=%f\n", tz, ty, tx, c3[tz][ty][tx]);
   __syncthreads();
+
+  // if (cell_idx == 0) {
+  //   printf("qvals[%d, %d, %d]=%f\n", tz, ty, tx, c3[tz][ty][tx]);
+  // }
 
   // 3. Compute Moments (qvals -> dofs)
   T(&f0)[Q][Q][Q] = c3; // qqq
@@ -439,7 +447,8 @@ __launch_bounds__(Q *Q *Q) __global__
   __syncthreads();
 
   if (tx < N - ty - tz && ty < N - tz && tz < N) {
-    // printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
+    if(cell_idx == 0)
+      printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
     atomicAdd(&out_dofs[g_dof_idx], f3[tz][ty][tx]);
   }
 }
@@ -599,7 +608,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   const int cell_idx = blockIdx.x;
 
   const int l_dof_idx =
-      tet_ijk(tz, ty, tx); // Only valid for ty < N - tz, tx < N - ty - tz
+      dof_reordering3d_d<N>[tet_ijk(tz, ty, tx)]; // Only valid for ty < N - tz, tx < N - ty - tz
   int g_dof_idx = -1;
 
   T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
@@ -719,18 +728,16 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
 
   // 3.3 f2[N][N][Q] -> f3[N][N][N]
   // tz := alpha1, ty := alpha2, tx := alpha3
-  T lf3 = 0.;
-  {
-    if (tz < N && ty < N && tx < N) {
-      for (int i3 = 0; i3 < Q; ++i3) {
-        T w = qwts0_d<T, Q>[i3];
-        lf3 += w * phi_0_N_s[(N - 1 - tz - ty)][i3][tx] *
-                          f2[ijk<N * Q, Q, 1>(tz, ty, i3)];
-      }
-    }
-  }
-
   if (tx < N - ty - tz && ty < N - tz && tz < N) {
+
+    T lf3 = 0.;
+    for (int i3 = 0; i3 < Q; ++i3) {
+      T w = qwts0_d<T, Q>[i3];
+      lf3 += w * phi_0_N_s[(N - 1 - tz - ty)][i3][tx] *
+                        f2[ijk<N * Q, Q, 1>(tz, ty, i3)];
+    }
+    if(cell_idx == 0)
+        printf("out_dof[%d]=%f \n", g_dof_idx, lf3);
     // printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
     atomicAdd(&out_dofs[g_dof_idx], lf3);
   }

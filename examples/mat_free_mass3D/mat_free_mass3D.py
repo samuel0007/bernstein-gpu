@@ -17,9 +17,7 @@ import os
 
 P = int(os.environ.get("polynomial_degree", 4))
 
-
-
-coord_element = element("Lagrange", "tetrahedron", 1, lagrange_variant=LagrangeVariant.bernstein, shape=(3,))
+coord_element = element("Lagrange", "tetrahedron", 1, shape=(3,))
 mesh = Mesh(coord_element)
 
 # Function Space

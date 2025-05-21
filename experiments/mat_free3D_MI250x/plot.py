@@ -20,7 +20,7 @@ def parse_log_file(filename):
     return sf, sf_otf, baseline
 
 P = list(range(3, 10))
-sf, sf_otf, base = zip(*(parse_log_file(f'log_{i}.txt') for i in P))
+sf, sf_otf, base = zip(*(parse_log_file(f'BP64_log_{i}.txt') for i in P))
 
 plt.plot(P, sf, marker='o', label='Sum Facto')
 plt.plot(P, sf_otf, marker='>', label='Sum Facto On the fly')
@@ -31,4 +31,4 @@ plt.title('Mat-free performance on MI250x \n 3D mass on tet mesh, shared mem opt
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
-plt.savefig('mi250x_mat_free3Dsf64.png')
+plt.savefig('mi250x_mat_free3Dsf64BP.png')

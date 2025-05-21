@@ -5,7 +5,7 @@
 // Copyright (C) 2022 Adeeb Arif Kor
 
 #include "Linear.hpp"
-#include "planar_wave.h"
+#include "planar_wave_gpu.h"
 
 #include <cmath>
 #include <dolfinx.h>
@@ -177,7 +177,7 @@ int main(int argc, char *argv[]) {
 
     // // Check norms
     // auto Norm = std::make_shared<fem::Form<T>>(
-    //     fem::create_form<T, T>(*form_planar_wave_Norm, {}, {{"u_n", u_n}},
+    //     fem::create_form<T, T>(*form_planar_wave_gpu_Norm, {}, {{"u_n", u_n}},
     //     {}, {}, {}, mesh));
     // T norm = fem::assemble_scalar(*Norm);
 

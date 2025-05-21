@@ -5,7 +5,7 @@
 // Copyright (C) 2022 Adeeb Arif Kor
 
 #include "Linear.hpp"
-#include "planar_wave.h"
+#include "planar_wave_tets_gpu.h"
 
 #include <cmath>
 #include <dolfinx.h>
@@ -17,7 +17,16 @@
 #define T_MPI MPI_DOUBLE
 using T = double;
 
-int main(int argc, char *argv[]) {
+#if USE_HIP
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::HIP>;
+#elif USE_CUDA
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
+#else
+static_assert(false)
+#endif
+
+int main(int argc, char *argv[])
+{
   dolfinx::init_logging(argc, argv);
   PetscInitialize(&argc, &argv, nullptr, nullptr);
 
@@ -28,8 +37,8 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
 
     // Source parameters
-    const T sourceFrequency = 0.5e6;      // (Hz)
-    const T sourceAmplitude = 60000;      // (Pa)
+    const T sourceFrequency = 0.1e6;      // (Hz)
+    const T sourceAmplitude = 6000;      // (Pa)
     const T period = 1 / sourceFrequency; // (s)
 
     // Material parameters
@@ -43,17 +52,16 @@ int main(int argc, char *argv[]) {
     const int degreeOfBasis = 2;
 
     // Read mesh and mesh tags
-    auto coord_element =
-        fem::CoordinateElement<T>(mesh::CellType::quadrilateral, 1);
+    auto coord_element = fem::CoordinateElement<T>(mesh::CellType::tetrahedron, 1);
     io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf",
                        "r");
     auto mesh = std::make_shared<mesh::Mesh<T>>(fmesh.read_mesh(
-        coord_element, mesh::GhostMode::none, "planewave_2d_1"));
-    mesh->topology()->create_connectivity(1, 2);
+        coord_element, mesh::GhostMode::none, "planar_3d_0_t"));
+    mesh->topology()->create_connectivity(2, 3);
     auto mt_cell = std::make_shared<mesh::MeshTags<std::int32_t>>(
-        fmesh.read_meshtags(*mesh, "planewave_2d_1_cells", std::nullopt));
+        fmesh.read_meshtags(*mesh, "planar_3d_0_t_cells", std::nullopt));
     auto mt_facet = std::make_shared<mesh::MeshTags<std::int32_t>>(
-        fmesh.read_meshtags(*mesh, "planewave_2d_1_facets", std::nullopt));
+        fmesh.read_meshtags(*mesh, "planar_3d_0_t_facets", std::nullopt));
 
     // Mesh parameters
     const int tdim = mesh->topology()->dim();
@@ -73,47 +81,64 @@ int main(int argc, char *argv[]) {
 
     // Finite element
     basix::FiniteElement element = basix::create_element<T>(
-        basix::element::family::P, basix::cell::type::quadrilateral,
-        degreeOfBasis, basix::element::lagrange_variant::gll_warped,
+        basix::element::family::P, basix::cell::type::tetrahedron, degreeOfBasis,
+        basix::element::lagrange_variant::bernstein,
         basix::element::dpc_variant::unset, false);
 
     // Define DG function space for the physical parameters of the domain
     basix::FiniteElement element_DG = basix::create_element<T>(
-        basix::element::family::P, basix::cell::type::quadrilateral, 0,
-        basix::element::lagrange_variant::gll_warped,
+        basix::element::family::P, basix::cell::type::tetrahedron, 0,
+        basix::element::lagrange_variant::unset,
         basix::element::dpc_variant::unset, true);
 
+    auto V = std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
+        mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
     auto V_DG =
         std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
             mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
     auto c0 = std::make_shared<fem::Function<T>>(V_DG);
     auto rho0 = std::make_shared<fem::Function<T>>(V_DG);
+    auto alpha = std::make_shared<fem::Function<T>>(V_DG);
 
     auto cells_1 = mt_cell->find(1);
 
+    std::cout << mt_facet->values().size() << std::endl;
+
     std::span<T> c0_ = c0->x()->mutable_array();
     std::for_each(cells_1.begin(), cells_1.end(),
-                  [&](std::int32_t &i) { c0_[i] = speedOfSound; });
+                  [&](std::int32_t &i)
+                  { c0_[i] = speedOfSound; });
     c0->x()->scatter_fwd();
 
     std::span<T> rho0_ = rho0->x()->mutable_array();
     std::for_each(cells_1.begin(), cells_1.end(),
-                  [&](std::int32_t &i) { rho0_[i] = density; });
+                  [&](std::int32_t &i)
+                  { rho0_[i] = density; });
     rho0->x()->scatter_fwd();
 
+    std::span<T> alpha_ = alpha->x()->mutable_array();
+    std::for_each(cells_1.begin(), cells_1.end(), [&](std::int32_t &i)
+                  { alpha_[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]); });
+    alpha->x()->scatter_fwd();
+    std::cout << "cells_1 size:" << cells_1.size() << std::endl;
+    std::cout << "alpha size:" << alpha->x()->mutable_array().size() << std::endl; 
+
+
     // Temporal parameters
-    const T CFL = 0.9;
+    const T CFL = 0.1;
     T timeStepSize = CFL * meshSizeMinGlobal /
                      (speedOfSound * degreeOfBasis * degreeOfBasis);
     const int stepPerPeriod = period / timeStepSize + 1;
     timeStepSize = period / stepPerPeriod;
     const T startTime = 0.0;
-    // const T finalTime = domainLength / speedOfSound + 4.0 / sourceFrequency;
-    const T finalTime = (domainLength / speedOfSound + 4.0 / sourceFrequency);
+    const T finalTime =
+        (domainLength / speedOfSound + 4.0 / sourceFrequency);
     const int numberOfStep = (finalTime - startTime) / timeStepSize + 1;
+    const int output_steps = 10;
 
-    if (mpi_rank == 0) {
-      std::cout << "Problem type: Planewave 2D" << "\n";
+    if (mpi_rank == 0)
+    {
+      std::cout << "Problem type: Planewave 3D" << "\n";
       std::cout << "Speed of sound: " << speedOfSound << "\n";
       std::cout << "Density: " << density << "\n";
       std::cout << "Source frequency: " << sourceFrequency << "\n";
@@ -129,60 +154,28 @@ int main(int argc, char *argv[]) {
     }
 
     // Model
-    auto model =
-        LinearSpectral<T, 4>(element, mesh, mt_facet, c0, rho0, sourceFrequency,
-                             sourceAmplitude, speedOfSound);
+    auto model = LinearSpectral<T, degreeOfBasis, DeviceVector>(
+        mesh, V, mt_facet, c0, rho0, alpha, sourceFrequency, sourceAmplitude,
+        speedOfSound);
 
-    // Solve
-    common::Timer tsolve("Solve time");
+    // Output space
+    basix::FiniteElement lagrange_element = basix::create_element<T>(
+        basix::element::family::P, basix::cell::type::tetrahedron, degreeOfBasis,
+        basix::element::lagrange_variant::gll_warped,
+        basix::element::dpc_variant::unset, false);
 
-    // model.init();
-
-    // tsolve.start();
-    // model.rk4(startTime, finalTime, timeStepSize);
-    // tsolve.stop();
-    
     auto V_out = std::make_shared<fem::FunctionSpace<T>>(
-        fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
+        fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(lagrange_element)));
+
     auto u_out = std::make_shared<fem::Function<T>>(V_out);
 
     // Output to VTX
-    dolfinx::io::VTXWriter<T> u_out_f(mesh->comm(), "output_final.bp", {u_out},
+    dolfinx::io::VTXWriter<T> f_out(mesh->comm(), "output_final.bp", {u_out},
                                       "bp5");
 
-    int output_steps = 10;
     model.init();
-    T t = startTime;
-    T output_dt = finalTime / output_steps;
-    for (int i = 0; i < output_steps; ++i) {
-      model.rk4(t, t + output_dt, timeStepSize);
-      auto u_n = model.u_sol();
-      u_out->interpolate(*u_n);
-      u_out_f.write(t);
-      t += output_dt;
-    }
 
-    // if (mpi_rank == 0) {
-    //   std::cout << "Solve time: " << tsolve.elapsed()[0] << std::endl;
-    //   std::cout << "Time per step: " << tsolve.elapsed()[0] / numberOfStep <<
-    //   std::endl;
-    // }
-
-    // // Final solution
-    // auto u_n = model.u_sol();
-
-    // // Output to VTX
-    // dolfinx::io::VTXWriter<T> u_out(mesh->comm(), "output_final.bp", {u_n},
-    // "bp5"); u_out.write(0.0);
-
-    // // Check norms
-    // auto Norm = std::make_shared<fem::Form<T>>(
-    //     fem::create_form<T, T>(*form_planar_wave_Norm, {}, {{"u_n", u_n}},
-    //     {}, {}, {}, mesh));
-    // T norm = fem::assemble_scalar(*Norm);
-
-    // if (mpi_rank == 0) {
-    //   std::cout << "L2 norm: " << std::sqrt(norm) << "\n";
-    // }
+    // tsolve.start();
+    model.rk4(startTime, finalTime, timeStepSize, 1000, u_out, f_out);
   }
 }

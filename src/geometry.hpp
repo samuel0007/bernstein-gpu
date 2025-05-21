@@ -1,12 +1,14 @@
 #pragma once
 
 #include <vector>
+#include <dolfinx/mesh/Mesh.h>
 
+using namespace dolfinx;
 /// Compute the determinant of the Jacobian ([cell][point]): nc x nq
 /// @param[in] mesh The mesh object (which contains the coordinate map)
 /// @param[in] points The quadrature points to compute Jacobian of the map
 template <typename T>
-std::vector<T> compute_geometry(std::shared_ptr<mesh::Mesh<T>> mesh,
+std::vector<T> compute_geometry(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
                                 std::vector<T> points, int dim = 2)
 {
     // Number of quadrature points
@@ -73,7 +75,7 @@ std::vector<T> compute_geometry(std::shared_ptr<mesh::Mesh<T>> mesh,
 /// @param[in] mesh The mesh object (which contains the coordinate map)
 /// @param[in] points The quadrature points to compute Jacobian of the map
 template <typename T>
-std::vector<T> compute_geometry(std::shared_ptr<mesh::Mesh<T>> mesh,
+std::vector<T> compute_geometry(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
                                 std::vector<T> points, std::vector<T> weights)
 {
     // Number of quadrature points

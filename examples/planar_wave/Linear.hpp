@@ -80,8 +80,8 @@ public:
     ft = FacetTags;
 
     // Define function space
-    V = std::make_shared<fem::FunctionSpace<T>>(
-        fem::create_functionspace(mesh, element));
+    V = std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
+        mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
 
     // Define field functions
     index_map = V->dofmap()->index_map;
@@ -120,7 +120,7 @@ public:
     for (auto &tag : ft_unique) {
       facet_domains = fem::compute_integration_domains(
           fem::IntegralType::exterior_facet, *V->mesh()->topology_mutable(),
-          ft->find(tag), mesh->topology()->dim() - 1);
+          ft->find(tag));
       fd[fem::IntegralType::exterior_facet].push_back({tag, facet_domains});
     }
 
@@ -247,23 +247,23 @@ public:
     // vector multiplication, since m doesn't change for linear wave
     // propagation.
 
-    // {
-    //   out = result->mutable_array();
-    //   _b = b->array();
-    //   _m = m->array();
+    {
+      out = result->mutable_array();
+      _b = b->array();
+      _m = m->array();
 
-    //   // Element wise division
-    //   // out[i] = b[i]/m[i]
-    //   std::transform(_b.begin(), _b.end(), _m.begin(), out.begin(),
-    //                  [](const T &bi, const T &mi) { return bi / mi; });
-    // }
+      // Element wise division
+      // out[i] = b[i]/m[i]
+      std::transform(_b.begin(), _b.end(), _m.begin(), out.begin(),
+                     [](const T &bi, const T &mi) { return bi / mi; });
+    }
 
     // la::Vector<T> test_result(*result);
     // test_result.set(0.);
     // _b = b->array();
 
-    int its = linalg::cg(*result, *b, action, 100, 1e-6);
-    std::cout << "cg its=" << its << std::endl;
+    // int its = linalg::cg(*result, *b, action, 100, 1e-6);
+    // std::cout << "cg its=" << its << std::endl;
   }
 
   /// Runge-Kutta 4th order solver

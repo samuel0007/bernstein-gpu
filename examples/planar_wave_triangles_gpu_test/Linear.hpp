@@ -3,11 +3,7 @@
 
 #pragma once
 
-#include "planar_wave_triangles_gpu.h"
-
-#include <fstream>
-#include <memory>
-#include <string>
+#include "planar_wave_triangles_gpu_test.h"
 
 #include "petscksp.h"
 #include "src/linalg.hpp"
@@ -15,26 +11,43 @@
 #include <dolfinx/fem/petsc.h>
 #include <dolfinx/geometry/utils.h>
 #include <dolfinx/la/Vector.h>
+#include <fstream>
+#include <memory>
+#include <string>
 
 #include "src/cg_gpu.hpp"
-#include "src/mass_baseline.hpp"
+#include "src/mass.hpp"
 #include "src/vector.hpp"
 
 using namespace dolfinx;
 
 namespace kernels {
 // Copy data from a la::Vector in to a la::Vector out, including ghost entries.
-// template <typename T> void copy(const la::Vector<T> &in, la::Vector<T> &out)
-// {
-//   std::span<const T> _in = in.array();
-//   std::span<T> _out = out.mutable_array();
-//   std::copy(_in.begin(), _in.end(), _out.begin());
-// };
+template <typename T> void copy(const la::Vector<T> &in, la::Vector<T> &out) {
+  std::span<const T> _in = in.array();
+  std::span<T> _out = out.mutable_array();
+  std::copy(_in.begin(), _in.end(), _out.begin());
+};
 
 void copy_d(auto &in, auto &out) {
   thrust::copy(in.thrust_vector().begin(), in.thrust_vector().end(),
                out.thrust_vector().begin());
 };
+
+/// Compute vector r = alpha*x + y
+/// @param r Result
+/// @param alpha
+/// @param x
+/// @param y
+template <typename T>
+void axpy(la::Vector<T> &r, T alpha, const la::Vector<T> &x,
+          const la::Vector<T> &y) {
+  std::transform(
+      x.array().begin(), x.array().begin() + x.index_map()->size_local(),
+      y.array().begin(), r.mutable_array().begin(),
+      [&alpha](const T &vx, const T &vy) { return vx * alpha + vy; });
+};
+
 } // namespace kernels
 
 /// Solver for the second order linear wave equation.
@@ -50,7 +63,7 @@ void copy_d(auto &in, auto &out) {
 /// @param [in] sourceSpeed The medium speed of sound that is in contact with
 /// the source
 template <typename T, int P, typename DeviceVector> class LinearSpectral {
-  static constexpr int Q = P + 2; // TODO
+  static constexpr int Q = 3; // TODO
 public:
   LinearSpectral(std::shared_ptr<mesh::Mesh<T>> mesh,
                  std::shared_ptr<fem::FunctionSpace<T>> V,
@@ -119,16 +132,52 @@ public:
       fd[fem::IntegralType::exterior_facet].push_back({tag, facet_domains});
     }
 
-
     for (auto const &[key, val] : fd) {
       for (auto const &[tag, vec] : val) {
         fd_view[key].push_back({tag, std::span(vec.data(), vec.size())});
       }
     }
 
+    // Define LHS form (bilinear)
+    a = std::make_shared<fem::Form<T>>(
+        fem::create_form<T>(*form_planar_wave_triangles_gpu_test_a_M, {V, V},
+                            {{"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
+
+    auto A = la::petsc::Matrix(fem::petsc::create_matrix(*a), false);
+    MatZeroEntries(A.mat());
+    fem::assemble_matrix(la::petsc::Matrix::set_block_fn(A.mat(), ADD_VALUES),
+                         *a, {});
+    MatAssemblyBegin(A.mat(), MAT_FINAL_ASSEMBLY);
+    MatAssemblyEnd(A.mat(), MAT_FINAL_ASSEMBLY);
+
+    MatNullSpace nsp;
+    MatNullSpaceCreate(
+        MPI_COMM_WORLD,
+        PETSC_TRUE, // Constant Nullspace (Pure NBc problem, imposes 0 mean)
+        0, 0, &nsp);
+    MatSetNearNullSpace(A.mat(), nsp);
+    // MatSetNullSpace(A.mat(), nsp);
+
+    // la::petsc::options::set("ksp_type", "gmres");
+    // la::petsc::options::set("ksp_type", "preonly");
+
+    la::petsc::options::set("ksp_type", "cg");
+    la::petsc::options::set("pc_type", "jacobi");
+    // la::petsc::options::set("pc_type", "lu");
+
+    lu.set_from_options();
+    lu.set_operator(A.mat());
+
+    // Mass Lumped
+    // m = std::make_shared<la::Vector<T>>(index_map, bs);
+    // m_ = m->mutable_array();
+    // std::fill(m_.begin(), m_.end(), 0.0);
+    // fem::assemble_vector(m_, *a);
+    // m->scatter_rev(std::plus<T>());
+
     // Define RHS form
     L = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_triangles_gpu_L, {V},
+        *form_planar_wave_triangles_gpu_test_L, {V},
         {{"g", g}, {"u_n", u_n}, {"v_n", v_n}, {"c0", c0}, {"rho0", rho0}}, {},
         fd_view, {}, {}));
 
@@ -137,6 +186,34 @@ public:
     b_d = std::make_shared<DeviceVector>(index_map, bs);
     u_n_d = std::make_shared<DeviceVector>(index_map, bs);
     v_n_d = std::make_shared<DeviceVector>(index_map, bs);
+
+    // matrix free
+    a_linear = std::make_shared<fem::Form<T>>(fem::create_form<T>(
+        *form_planar_wave_triangles_gpu_test_a, {V},
+        {{"u", ui}, {"c0", c0}, {"rho0", rho0}}, {}, {}, {}));
+
+    // cpu setup
+    coeff = fem::allocate_coefficient_storage(*a_linear);
+    constants = fem::pack_constants(*a_linear);
+
+    action = [this](auto &x, auto &y) {
+      y.set(0.0);
+
+      // Update coefficient ui (just copy data from x to ui)
+      std::ranges::copy(x.array(), this->ui->x()->mutable_array().begin());
+
+      // Compute action of A on x
+      fem::pack_coefficients(*a_linear, coeff);
+      fem::assemble_vector(y.mutable_array(), *a_linear,
+                           std::span<const T>(constants),
+                           fem::make_coefficients_span(coeff));
+
+      // // Accumulate ghost values
+      // y.scatter_rev(std::plus<T>());
+
+      // // Update ghost values
+      // y.scatter_fwd();
+    };
   }
   /// Set the initial values of u and v, i.e. u_0 and v_0
   void init() {
@@ -146,8 +223,88 @@ public:
     v_n->x()->set(0.0);
   }
 
+  /// Evaluate du/dt = f0(t, u, v)
+  /// @param[in] t Current time, i.e. tn
+  /// @param[in] u Current u, i.e. un
+  /// @param[in] v Current v, i.e. vn
+  /// @param[out] result Result, i.e. dun/dtn
+  void f0(T &t, std::shared_ptr<la::Vector<T>> u,
+          std::shared_ptr<la::Vector<T>> v,
+          std::shared_ptr<la::Vector<T>> result) {
+    kernels::copy<T>(*v, *result);
+  }
+
   void f0(T &t, DeviceVector &u, DeviceVector &v, DeviceVector &result) {
     kernels::copy_d(v, result);
+  }
+
+  /// Evaluate dv/dt = f1(t, u, v)
+  /// @param[in] t Current time, i.e. tn
+  /// @param[in] u Current u, i.e. un
+  /// @param[in] v Current v, i.e. vn
+  /// @param[out] result Result, i.e. dvn/dtn
+  void f1(T &t, std::shared_ptr<la::Vector<T>> u,
+          std::shared_ptr<la::Vector<T>> v,
+          std::shared_ptr<la::Vector<T>> result) {
+
+    // Apply windowing
+    if (t < period * window_length) {
+      window = 0.5 * (1.0 - cos(freq * M_PI * t / window_length));
+    } else {
+      window = 1.0;
+    }
+
+    // Update boundary condition
+    std::fill(g_.begin(), g_.end(),
+              window * p0 * w0 / s0 * cos(w0 * t)); // homogenous domain
+    // std::fill(g_.begin(), g_.end(), 2.0 * window * p0 * w0 / s0 * cos(w0 *
+    // t)); // heterogenous domain
+
+    u->scatter_fwd();
+    kernels::copy<T>(*u, *u_n->x());
+
+    v->scatter_fwd();
+    kernels::copy<T>(*v, *v_n->x());
+
+    // Assemble RHS
+    std::fill(b_.begin(), b_.end(), 0.0);
+    fem::assemble_vector(b_, *L);
+    b->scatter_rev(std::plus<T>());
+
+    // KSP CPU CG
+    // {
+    //   la::Vector<T> test_result(*result);
+    //   la::petsc::Vector _u(la::petsc::create_vector_wrap(*test_result),
+    //   false); la::petsc::Vector _b(la::petsc::create_vector_wrap(*b), false);
+    //   int its = lu.solve(_u.vec(), _b.vec());
+    //   std::cout << "KSP CPU CG its=" << its << "\n";
+    //   auto ksp = lu.ksp();
+    //   KSPConvergedReason reason;
+    //   KSPGetConvergedReason(ksp, &reason);
+    //   if (reason < 0)
+    //     std::cerr << "KSP Failure: reason " << reason << "\n";
+    // }
+
+    // GPU CG
+    DeviceVector x_d(index_map, bs);
+    x_d.copy_from_host(*result);
+    DeviceVector b_d(index_map, bs);
+    b_d.copy_from_host(*b);
+
+    double rtol = 1e-6;
+
+    dolfinx::acc::CGSolver<DeviceVector> cg(index_map, bs);
+    cg.set_max_iterations(100);
+    cg.set_tolerance(rtol);
+    int gpu_its = cg.solve(gpu_action, x_d, b_d, false);
+    std::cout << "House GPU CG its=" << gpu_its << std::endl;
+
+    // CPU CG
+    // int its = linalg::cg(*result, *b, action, 100, rtol);
+    // std::cout << "House CPU CG its=" << its << std::endl;
+
+    thrust::copy(x_d.thrust_vector().begin(), x_d.thrust_vector().end(),
+                 result->mutable_array().begin());
   }
 
   void f1(T &t, DeviceVector &u_d, DeviceVector &v_d, DeviceVector &result_d) {
@@ -162,8 +319,10 @@ public:
     // Update boundary condition
     std::fill(g_.begin(), g_.end(),
               window * p0 * w0 / s0 * cos(w0 * t)); // homogenous domain
+    // std::fill(g_.begin(), g_.end(), 2.0 * window * p0 * w0 / s0 * cos(w0 *
+    // t)); // heterogenous domain
 
-    // RHS Assembly is done on CPU, update form coefficients
+    // Assembly is done on CPU, update form coefficients
     thrust::copy(u_d.thrust_vector().begin(), u_d.thrust_vector().end(),
                  u_n->x()->mutable_array().begin());
     thrust::copy(v_d.thrust_vector().begin(), v_d.thrust_vector().end(),
@@ -180,7 +339,7 @@ public:
     cg.set_max_iterations(100);
     cg.set_tolerance(rtol);
     int gpu_its = cg.solve(gpu_action, result_d, *b_d, false);
-    // std::cout << "House GPU CG its=" << gpu_its << std::endl;
+    std::cout << "House GPU CG its=" << gpu_its << std::endl;
   }
 
   /// Runge-Kutta 4th order solver
@@ -189,14 +348,12 @@ public:
   /// @param[in] timeStep  time step size of the solver
   void rk4(const T &startTime, const T &finalTime, const T &timeStep,
            int output_frequency, std::shared_ptr<fem::Function<T>> u_out,
-           dolfinx::io::VTXWriter<T> &f_out) {
+           dolfinx::io::VTXWriter<T>& f_out) {
     // Time-stepping parameters
     T t = startTime;
     T tf = finalTime;
     T dt = timeStep;
     int totalStep = (finalTime - startTime) / timeStep + 1;
-    int outputStep = totalStep / output_frequency;
-
     int step = 0;
 
     // Time-stepping vectors
@@ -211,8 +368,30 @@ public:
     DeviceVector ku_d(index_map, bs);
     DeviceVector kv_d(index_map, bs);
 
+    // Placeholder vectors at time step n
+    // u_ = std::make_shared<la::Vector<T>>(index_map, bs);
+    // v_ = std::make_shared<la::Vector<T>>(index_map, bs);
+
+    // kernels::copy<T>(*u_n->x(), *u_);
+    // kernels::copy<T>(*v_n->x(), *v_);
+
     kernels::copy_d(*u_n_d, u__d);
     kernels::copy_d(*v_n_d, v__d);
+
+    // Placeholder vectors at intermediate time step n
+    // un = std::make_shared<la::Vector<T>>(index_map, bs);
+    // vn = std::make_shared<la::Vector<T>>(index_map, bs);
+
+    // // Placeholder vectors at start of time step
+    // u0 = std::make_shared<la::Vector<T>>(index_map, bs);
+    // v0 = std::make_shared<la::Vector<T>>(index_map, bs);
+
+    // // Placeholder at k intermediate time step
+    // ku = std::make_shared<la::Vector<T>>(index_map, bs);
+    // kv = std::make_shared<la::Vector<T>>(index_map, bs);
+
+    // kernels::copy<T>(*u_, *ku);
+    // kernels::copy<T>(*v_, *kv);
 
     kernels::copy_d(u__d, ku_d);
     kernels::copy_d(v__d, kv_d);
@@ -228,13 +407,23 @@ public:
     while (t < tf) {
       dt = std::min(dt, tf - t);
 
+      // Store solution at start of time step
+      // kernels::copy<T>(*u_, *u0);
+      // kernels::copy<T>(*v_, *v0);
+
       kernels::copy_d(u__d, u0_d);
       kernels::copy_d(v__d, v0_d);
 
       // Runge-Kutta 4th order step
       for (int i = 0; i < 4; i++) {
+        // kernels::copy<T>(*u0, *un);
+        // kernels::copy<T>(*v0, *vn);
+
         kernels::copy_d(u0_d, un_d);
         kernels::copy_d(v0_d, vn_d);
+
+        // kernels::axpy<T>(*un, dt * a_runge[i], *ku, *un);
+        // kernels::axpy<T>(*vn, dt * a_runge[i], *kv, *vn);
 
         acc::axpy(un_d, dt * a_runge[i], ku_d, un_d);
         acc::axpy(vn_d, dt * a_runge[i], kv_d, vn_d);
@@ -242,8 +431,16 @@ public:
         // RK time evaluation
         tn = t + c_runge[i] * dt;
 
+        // // Compute RHS vector
+        // f0(tn, un, vn, ku);
+        // f1(tn, un, vn, kv);
+
         f0(tn, un_d, vn_d, ku_d);
         f1(tn, un_d, vn_d, kv_d);
+
+        // // Update solution
+        // kernels::axpy<T>(*u_, dt * b_runge[i], *ku, *u_);
+        // kernels::axpy<T>(*v_, dt * b_runge[i], *kv, *v_);
 
         acc::axpy(u__d, dt * b_runge[i], ku_d, u__d);
         acc::axpy(v__d, dt * b_runge[i], kv_d, v__d);
@@ -259,7 +456,7 @@ public:
                     << std::endl;
         }
       }
-      if (step % outputStep == 0) {
+      if (step % output_frequency == 0) {
         thrust::copy(u__d.thrust_vector().begin(), u__d.thrust_vector().end(),
                      u_n->x()->mutable_array().begin());
         u_out->interpolate(*u_n);
@@ -314,7 +511,7 @@ private:
   std::span<const T> _m, _b;
 
   la::petsc::KrylovSolver lu{MPI_COMM_WORLD};
-  acc::MatFreeMassBaseline<T, P, Q> gpu_action;
+  acc::MatFreeMass<T, P, Q> gpu_action;
 };
 
 // Note:

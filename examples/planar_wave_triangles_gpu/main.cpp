@@ -25,8 +25,8 @@ using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
 static_assert(false)
 #endif
 
-
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[])
+{
   dolfinx::init_logging(argc, argv);
   PetscInitialize(&argc, &argv, nullptr, nullptr);
 
@@ -49,18 +49,19 @@ int main(int argc, char* argv[]) {
     const T domainLength = 0.12; // (m)
 
     // FE parameters
-    const int degreeOfBasis = 2;
+    const int degreeOfBasis = 4;
 
     // Read mesh and mesh tags
     auto coord_element = fem::CoordinateElement<T>(mesh::CellType::triangle, 1);
-    io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR)+"/mesh.xdmf", "r");
-    auto mesh = std::make_shared<mesh::Mesh<T>>(
-        fmesh.read_mesh(coord_element, mesh::GhostMode::none, "planewave_2d_1_t"));
+    io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf",
+                       "r");
+    auto mesh = std::make_shared<mesh::Mesh<T>>(fmesh.read_mesh(
+        coord_element, mesh::GhostMode::none, "mesh"));
     mesh->topology()->create_connectivity(1, 2);
     auto mt_cell = std::make_shared<mesh::MeshTags<std::int32_t>>(
-        fmesh.read_meshtags(*mesh, "planewave_2d_1_t_cells"));
+        fmesh.read_meshtags(*mesh, "Cell tags", std::nullopt));
     auto mt_facet = std::make_shared<mesh::MeshTags<std::int32_t>>(
-        fmesh.read_meshtags(*mesh, "planewave_2d_1_t_facets"));
+        fmesh.read_meshtags(*mesh, "Facet tags", std::nullopt));
 
     // Mesh parameters
     const int tdim = mesh->topology()->dim();
@@ -68,31 +69,33 @@ int main(int argc, char* argv[]) {
     std::vector<int> num_cell_range(num_cell);
     std::iota(num_cell_range.begin(), num_cell_range.end(), 0.0);
     std::vector<T> mesh_size_local = mesh::h(*mesh, num_cell_range, tdim);
-    std::vector<T>::iterator min_mesh_size_local
-        = std::min_element(mesh_size_local.begin(), mesh_size_local.end());
-    int mesh_size_local_idx = std::distance(mesh_size_local.begin(), min_mesh_size_local);
+    std::vector<T>::iterator min_mesh_size_local =
+        std::min_element(mesh_size_local.begin(), mesh_size_local.end());
+    int mesh_size_local_idx =
+        std::distance(mesh_size_local.begin(), min_mesh_size_local);
     T meshSizeMinLocal = mesh_size_local.at(mesh_size_local_idx);
     T meshSizeMinGlobal;
-    MPI_Reduce(&meshSizeMinLocal, &meshSizeMinGlobal, 1, T_MPI, MPI_MIN, 0, MPI_COMM_WORLD);
+    MPI_Reduce(&meshSizeMinLocal, &meshSizeMinGlobal, 1, T_MPI, MPI_MIN, 0,
+               MPI_COMM_WORLD);
     MPI_Bcast(&meshSizeMinGlobal, 1, T_MPI, 0, MPI_COMM_WORLD);
 
     // Finite element
     basix::FiniteElement element = basix::create_element<T>(
-      basix::element::family::P, basix::cell::type::triangle, degreeOfBasis,
-      basix::element::lagrange_variant::bernstein,
-      basix::element::dpc_variant::unset, false
-    );
+        basix::element::family::P, basix::cell::type::triangle, degreeOfBasis,
+        basix::element::lagrange_variant::bernstein,
+        basix::element::dpc_variant::unset, false);
 
     // Define DG function space for the physical parameters of the domain
     basix::FiniteElement element_DG = basix::create_element<T>(
-      basix::element::family::P, basix::cell::type::triangle, 0,
-      basix::element::lagrange_variant::unset,
-      basix::element::dpc_variant::unset, true
-    );
-    auto V = std::make_shared<fem::FunctionSpace<T>>(
-      fem::create_functionspace(mesh, element));
-    auto V_DG = std::make_shared<fem::FunctionSpace<T>>(
-        fem::create_functionspace(mesh, element_DG));
+        basix::element::family::P, basix::cell::type::triangle, 0,
+        basix::element::lagrange_variant::unset,
+        basix::element::dpc_variant::unset, true);
+
+    auto V = std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
+        mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
+    auto V_DG =
+        std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
+            mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
     auto c0 = std::make_shared<fem::Function<T>>(V_DG);
     auto rho0 = std::make_shared<fem::Function<T>>(V_DG);
     auto alpha = std::make_shared<fem::Function<T>>(V_DG);
@@ -101,33 +104,39 @@ int main(int argc, char* argv[]) {
 
     std::span<T> c0_ = c0->x()->mutable_array();
     std::for_each(cells_1.begin(), cells_1.end(),
-                  [&](std::int32_t& i) { c0_[i] = speedOfSound; });
+                  [&](std::int32_t &i)
+                  { c0_[i] = speedOfSound; });
     c0->x()->scatter_fwd();
 
     std::span<T> rho0_ = rho0->x()->mutable_array();
     std::for_each(cells_1.begin(), cells_1.end(),
-                  [&](std::int32_t& i) { rho0_[i] = density; });
+                  [&](std::int32_t &i)
+                  { rho0_[i] = density; });
     rho0->x()->scatter_fwd();
-    
+
     std::span<T> alpha_ = alpha->x()->mutable_array();
-    std::for_each(cells_1.begin(), cells_1.end(),
-                  [&](std::int32_t& i) { alpha_[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]); });
+    std::for_each(cells_1.begin(), cells_1.end(), [&](std::int32_t &i)
+                  { alpha_[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]); });
     alpha->x()->scatter_fwd();
+    std::cout << "cells_1 size:" << cells_1.size() << std::endl;
+    std::cout << "alpha size:" << alpha->x()->mutable_array().size() << std::endl; 
 
 
     // Temporal parameters
-    const T CFL = 0.9;
-    T timeStepSize = CFL * meshSizeMinGlobal / (speedOfSound * degreeOfBasis * degreeOfBasis);
+    const T CFL = 0.5;
+    T timeStepSize = CFL * meshSizeMinGlobal /
+                     (speedOfSound * degreeOfBasis * degreeOfBasis);
     const int stepPerPeriod = period / timeStepSize + 1;
     timeStepSize = period / stepPerPeriod;
     const T startTime = 0.0;
-    // const T finalTime = domainLength / speedOfSound + 4.0 / sourceFrequency;
-    const T finalTime = (domainLength / speedOfSound + 4.0 / sourceFrequency) / 4.;
+    const T finalTime =
+        (domainLength / speedOfSound + 4.0 / sourceFrequency);
     const int numberOfStep = (finalTime - startTime) / timeStepSize + 1;
+    const int output_steps = 120;
 
-    if (mpi_rank == 0) {
-      std::cout << "Problem type: Planewave 2D"
-                << "\n";
+    if (mpi_rank == 0)
+    {
+      std::cout << "Problem type: Planewave 2D" << "\n";
       std::cout << "Speed of sound: " << speedOfSound << "\n";
       std::cout << "Density: " << density << "\n";
       std::cout << "Source frequency: " << sourceFrequency << "\n";
@@ -143,51 +152,28 @@ int main(int argc, char* argv[]) {
     }
 
     // Model
-    auto model = LinearSpectral<T, degreeOfBasis, DeviceVector>(mesh, V, mt_facet, c0, rho0, alpha, sourceFrequency,
-                                      sourceAmplitude, speedOfSound);
-
-    // Solve
-    common::Timer tsolve("Solve time");
-
-    model.init();
-
-    tsolve.start();
-    model.rk4(startTime, finalTime, timeStepSize);
-    tsolve.stop();
-
-    if (mpi_rank == 0) {
-      std::cout << "Solve time: " << tsolve.elapsed()[0] << "s" << std::endl;
-      std::cout << "Time per step: " << tsolve.elapsed()[0] / numberOfStep << "s" << std::endl;
-    }
-
-    // Final solution
-    auto u_n = model.u_sol();
+    auto model = LinearSpectral<T, degreeOfBasis, DeviceVector>(
+        mesh, V, mt_facet, c0, rho0, alpha, sourceFrequency, sourceAmplitude,
+        speedOfSound);
 
     // Output space
     basix::FiniteElement lagrange_element = basix::create_element<T>(
-      basix::element::family::P, basix::cell::type::triangle, degreeOfBasis,
-      basix::element::lagrange_variant::unset,
-      basix::element::dpc_variant::unset, false
-    );
+        basix::element::family::P, basix::cell::type::triangle, degreeOfBasis,
+        basix::element::lagrange_variant::gll_warped,
+        basix::element::dpc_variant::unset, false);
 
     auto V_out = std::make_shared<fem::FunctionSpace<T>>(
-      fem::create_functionspace(mesh, lagrange_element));
+        fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(lagrange_element)));
 
     auto u_out = std::make_shared<fem::Function<T>>(V_out);
-    u_out->interpolate(*u_n);
-
 
     // Output to VTX
-    dolfinx::io::VTXWriter<T> u_out_f(mesh->comm(), "output_final.bp", {u_out}, "bp5");
-    u_out_f.write(0.0);
+    dolfinx::io::VTXWriter<T> f_out(mesh->comm(), "output_final.bp", {u_out},
+                                      "bp5");
 
-    // Check norms
-    auto Norm = std::make_shared<fem::Form<T>>(
-        fem::create_form<T, T>(*form_planar_wave_triangles_gpu_Norm, {}, {{"u_n", u_n}}, {}, {}, {}, mesh));
-    T norm = fem::assemble_scalar(*Norm);
+    model.init();
 
-    if (mpi_rank == 0) {
-      std::cout << "L2 norm: " << std::sqrt(norm) << "\n";
-    }
+    // tsolve.start();
+    model.rk4(startTime, finalTime, timeStepSize, output_steps, u_out, f_out);
   }
 }

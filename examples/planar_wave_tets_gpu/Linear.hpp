@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "planar_wave_triangles_gpu.h"
+#include "planar_wave_tets_gpu.h"
 
 #include <fstream>
 #include <memory>
@@ -119,7 +119,6 @@ public:
       fd[fem::IntegralType::exterior_facet].push_back({tag, facet_domains});
     }
 
-
     for (auto const &[key, val] : fd) {
       for (auto const &[tag, vec] : val) {
         fd_view[key].push_back({tag, std::span(vec.data(), vec.size())});
@@ -128,7 +127,7 @@ public:
 
     // Define RHS form
     L = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_planar_wave_triangles_gpu_L, {V},
+        *form_planar_wave_tets_gpu_L, {V},
         {{"g", g}, {"u_n", u_n}, {"v_n", v_n}, {"c0", c0}, {"rho0", rho0}}, {},
         fd_view, {}, {}));
 
@@ -150,7 +149,7 @@ public:
     kernels::copy_d(v, result);
   }
 
-  void f1(T &t, DeviceVector &u_d, DeviceVector &v_d, DeviceVector &result_d) {
+  int f1(T &t, DeviceVector &u_d, DeviceVector &v_d, DeviceVector &result_d) {
 
     // Apply windowing
     if (t < period * window_length) {
@@ -175,12 +174,11 @@ public:
     b->scatter_rev(std::plus<T>());
     b_d->copy_from_host(*b);
 
-    double rtol = 1e-6;
+    double rtol = 1e-8;
     dolfinx::acc::CGSolver<DeviceVector> cg(index_map, bs);
-    cg.set_max_iterations(100);
+    cg.set_max_iterations(2000);
     cg.set_tolerance(rtol);
-    int gpu_its = cg.solve(gpu_action, result_d, *b_d, false);
-    // std::cout << "House GPU CG its=" << gpu_its << std::endl;
+    return cg.solve(gpu_action, result_d, *b_d, false);
   }
 
   /// Runge-Kutta 4th order solver
@@ -243,7 +241,8 @@ public:
         tn = t + c_runge[i] * dt;
 
         f0(tn, un_d, vn_d, ku_d);
-        f1(tn, un_d, vn_d, kv_d);
+        int cg_its = f1(tn, un_d, vn_d, kv_d);
+        std::cout << "stage=" << i << " its=" << cg_its << std::endl;
 
         acc::axpy(u__d, dt * b_runge[i], ku_d, u__d);
         acc::axpy(v__d, dt * b_runge[i], kv_d, v__d);
@@ -314,7 +313,7 @@ private:
   std::span<const T> _m, _b;
 
   la::petsc::KrylovSolver lu{MPI_COMM_WORLD};
-  acc::MatFreeMassBaseline<T, P, Q> gpu_action;
+  acc::MatFreeMassBaseline3D<T, P, Q> gpu_action;
 };
 
 // Note:

@@ -1,8 +1,12 @@
 .*/
+*.h5
+*.xdmf
 
-build/
 
 *.ncu-rep
 
+build/
 experiments/mat_free3D_RTX/*.txt
 experiments/mat_free_RTX/*.txt
+
+mesh/data

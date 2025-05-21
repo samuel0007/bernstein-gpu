@@ -1,11 +1,11 @@
 cmake_minimum_required(VERSION 3.19)
 
 option(cpu "Build for CPUs"	off)
-option(nvidia "Build for NVidia GPUs" off)
-option(amd "Build for AMD GPUs"	on)
+option(nvidia "Build for NVidia GPUs" on)
+option(amd "Build for AMD GPUs"	off)
 
-set(polynomial_degree 2 CACHE STRING "Polynomial degree")
-set(scalar_type "float32" CACHE STRING "Scalar type")
+set(polynomial_degree 5 CACHE STRING "Polynomial degree")
+set(scalar_type "float64" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 
 if(cpu AND nvidia OR cpu AND amd)
@@ -138,6 +138,9 @@ add_example(mass_cg)
 add_example(planar_wave)
 add_example(planar_wave_triangles)
 add_example(planar_wave_triangles_gpu)
+add_example(planar_wave_tets_gpu)
+add_example(planar_wave_triangles_gpu_test)
+
 
 
 # Do not throw error for 'multi-line comments' (these are typical in rst which

@@ -243,6 +243,18 @@ public:
 
     // auto element_p = this->V->element();
     // std::vector<int> dof_reordering = get_tp_ordering2D<P>(element_p);
+    std::vector<int> dof_reordering = {0, 4, 1, 3, 2, 6, 5, 9, 8, 7};
+    // std::vector<int> dof_reordering = {0, 1, 2, 3};
+    // std::vector<int> dof_reordering = lex_dof_ordering(
+    //   basix::element::family::P, basix::cell::type::tetrahedron, P);
+    // std::vector<int> dof_reordering = {0, 1, 2, 3};
+    // std::vector<int> dof_reordering = {0, } 
+    // std::reverse(dof_reordering.begin(), dof_reordering.end());
+    for(int i = 0; i < dof_reordering.size(); ++i) {
+      dof_reordering[i] = i;
+      std::cout << "i=" << dof_reordering[i] << "\n";
+    }
+    assert(dof_reordering.size() == K);
 
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
@@ -369,9 +381,9 @@ public:
               << std::endl;
 
     // Copy dofmap reordering to the gpu
-    // err_check(deviceMemcpyToSymbol((dof_reordering_d<P + 1>),
-    //                                dof_reordering.data(),
-    //                                dof_reordering.size() * sizeof(int)));
+    err_check(deviceMemcpyToSymbol((dof_reordering3d_d<N>),
+                                   dof_reordering.data(),
+                                   dof_reordering.size() * sizeof(int)));
     // Copy quadrature weights as symbols to the gpu
     err_check(deviceMemcpyToSymbol((qwts0_d<T, Q>), qwts0.data(),
                                    qwts0.size() * sizeof(T)));

@@ -26,7 +26,7 @@ using namespace dolfinx;
 namespace po = boost::program_options;
 
 using T = PetscScalar;
-using U = typename dolfinx::scalar_value_type_t<T>;
+using U = typename dolfinx::scalar_value_t<T>;
 
 #if USE_HIP
 using DeviceVector = dolfinx::acc::Vector<T, acc::Device::HIP>;
@@ -84,7 +84,7 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   constexpr int polynomial_degree = POLYNOMIAL_DEGREE;
   // TODO: verify if expression integrates exactly. Probably? Comes from Basix.
   // constexpr int quadrature_points = (polynomial_degree + 2) / 2;
-  constexpr int quadrature_points = polynomial_degree + 1;
+  constexpr int quadrature_points = polynomial_degree + 2;
 
   const int nelements = vm["nelements"].as<int>();
   const int nreps = vm["nreps"].as<int>();
@@ -107,10 +107,10 @@ void solver(MPI_Comm comm, po::variables_map vm) {
       basix::element::dpc_variant::unset, true);
 
   auto V = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, element, {}));
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element)));
 
   auto V_DG = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, element_DG, {}));
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element_DG)));
 
   auto alpha = std::make_shared<fem::Function<T>>(V_DG);
   alpha->x()->set(0.5);
@@ -269,7 +269,7 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 /// Main program
 int main(int argc, char *argv[]) {
   using T = PetscScalar;
-  using U = typename dolfinx::scalar_value_type_t<T>;
+  using U = typename dolfinx::scalar_value_t<T>;
   init_logging(argc, argv);
   MPI_Init(&argc, &argv);
   {
