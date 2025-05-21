@@ -447,8 +447,8 @@ __launch_bounds__(Q *Q *Q) __global__
   __syncthreads();
 
   if (tx < N - ty - tz && ty < N - tz && tz < N) {
-    if(cell_idx == 0)
-      printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
+    // if(cell_idx == 0)
+    //   printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
     atomicAdd(&out_dofs[g_dof_idx], f3[tz][ty][tx]);
   }
 }
@@ -736,8 +736,8 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
       lf3 += w * phi_0_N_s[(N - 1 - tz - ty)][i3][tx] *
                         f2[ijk<N * Q, Q, 1>(tz, ty, i3)];
     }
-    if(cell_idx == 0)
-        printf("out_dof[%d]=%f \n", g_dof_idx, lf3);
+    // if(cell_idx == 0)
+        // printf("out_dof[%d]=%f \n", g_dof_idx, lf3);
     // printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
     atomicAdd(&out_dofs[g_dof_idx], lf3);
   }

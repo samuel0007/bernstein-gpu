@@ -25,14 +25,12 @@
 using namespace dolfinx;
 namespace po = boost::program_options;
 
-using T = PetscScalar;
-// using U = SCALAR_TYPE;
-using U = typename dolfinx::scalar_value_t<T>;
+using T = SCALAR_TYPE;
 
 #if USE_HIP
-using DeviceVector = dolfinx::acc::Vector<U, acc::Device::HIP>;
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::HIP>;
 #elif USE_CUDA
-using DeviceVector = dolfinx::acc::Vector<U, acc::Device::CUDA>;
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
 #else
 static_assert(false)
 #endif
@@ -40,30 +38,6 @@ static_assert(false)
 #ifndef POLYNOMIAL_DEGREE
 #define POLYNOMIAL_DEGREE 4
 #endif
-
-namespace linalg
-{
-
-  template <typename T>
-  void copy(const la::Vector<T> &in, la::Vector<T> &out)
-  {
-    std::span<const T> _in = in.array();
-    std::span<T> _out = out.mutable_array();
-    std::copy(_in.begin(), _in.end(), _out.begin());
-  }
-
-  /// @brief Compute vector r = alpha * x + y.
-  /// @param[out] r
-  /// @param[in] alpha
-  /// @param[in] x
-  /// @param[in] y
-  void axpy(auto &&r, auto alpha, auto &&x, auto &&y)
-  {
-    std::ranges::transform(x.array(), y.array(), r.mutable_array().begin(),
-                           [alpha](auto x, auto y)
-                           { return alpha * x + y; });
-  }
-} // namespace linalg
 
 po::variables_map get_cli_config(int argc, char *argv[])
 {
@@ -86,7 +60,7 @@ po::variables_map get_cli_config(int argc, char *argv[])
   return vm;
 }
 
-template <typename T, std::floating_point U>
+template <std::floating_point T>
 void solver(MPI_Comm comm, po::variables_map vm)
 {
   constexpr int polynomial_degree = POLYNOMIAL_DEGREE;
@@ -100,34 +74,28 @@ void solver(MPI_Comm comm, po::variables_map vm)
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
-  auto mesh = std::make_shared<mesh::Mesh<U>>(mesh::create_box<U>(
+  auto mesh = std::make_shared<mesh::Mesh<T>>(mesh::create_box<T>(
       comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}},
       {nelements, nelements, nelements}, mesh::CellType::tetrahedron,
       mesh::create_cell_partitioner(mesh::GhostMode::none)));
-  auto element = basix::create_element<U>(
+  auto element = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::tetrahedron,
       polynomial_degree, basix::element::lagrange_variant::bernstein,
       basix::element::dpc_variant::unset, false);
 
-  auto element_DG = basix::create_element<U>(
+  auto element_DG = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::tetrahedron, 0,
       basix::element::lagrange_variant::unset,
       basix::element::dpc_variant::unset, true);
 
-  auto V = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element)));
+  auto V = std::make_shared<fem::FunctionSpace<T>>(
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
 
-  auto V_DG = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element_DG)));
+  auto V_DG = std::make_shared<fem::FunctionSpace<T>>(
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
 
-  auto alpha = std::make_shared<fem::Function<U>>(V_DG);
+  auto alpha = std::make_shared<fem::Function<T>>(V_DG);
   alpha->x()->set(1.0);
-
-  // Action of the bilinear form "a" on a function ui
-  auto ui = std::make_shared<fem::Function<U>>(V);
-  auto M = std::make_shared<fem::Form<U>>(
-      fem::create_form<U>(*form_mat_free_mass3D_M, {V},
-                          {{"ui", ui}, {"alpha", alpha}}, {}, {}, {}));
 
   const std::size_t tdim = mesh->topology()->dim();
   std::size_t ncells = mesh->topology()->index_map(tdim)->size_global();
@@ -137,13 +105,13 @@ void solver(MPI_Comm comm, po::variables_map vm)
   // if (rank == 0)
   {
     std::string fp_type = "float";
-    if (std::is_same_v<U, float>)
+    if (std::is_same_v<T, float>)
       fp_type += "32";
-    else if (std::is_same_v<U, double>)
+    else if (std::is_same_v<T, double>)
       fp_type += "64";
 
     constexpr int N = polynomial_degree + 1;
-    constexpr int K = (N + 1) * N / 2; // Number of dofs on triangle
+    constexpr int K = (N + 2) * (N + 1) * N / 2; // Number of dofs on triangle
 
     std::cout << device_information();
     std::cout << "-----------------------------------\n";
@@ -164,11 +132,11 @@ void solver(MPI_Comm comm, po::variables_map vm)
   }
 
   // ----------- 2. GPU Matrix Free setup -----------
-  acc::MatFreeMass3D<U, polynomial_degree, quadrature_points> gpu_action(
+  acc::MatFreeMass3D<T, polynomial_degree, quadrature_points> gpu_action(
       mesh, V, alpha->x()->array());
-  acc::MatFreeMassSF3D<U, polynomial_degree, quadrature_points> gpu_action_sf(
+  acc::MatFreeMassSF3D<T, polynomial_degree, quadrature_points> gpu_action_sf(
       mesh, V, alpha->x()->array());
-  acc::MatFreeMassBaseline3D<U, polynomial_degree, quadrature_points>
+  acc::MatFreeMassBaseline3D<T, polynomial_degree, quadrature_points>
       gpu_action_baseline(mesh, V, alpha->x()->array());
 
   // ----------- 3. Matrix Free apply -----------
@@ -181,18 +149,18 @@ void solver(MPI_Comm comm, po::variables_map vm)
   // GPU
   DeviceVector x_d(map, map_bs);
   DeviceVector y_d(map, map_bs);
-  y_d.set(U{0.0});
+  y_d.set(T{0.0});
 
-  for (int j = 0; j < 10; ++j)
-  {
-    std::cout << "j=" << j << "\n";
+  // for (int j = 0; j < 10; ++j)
+  // {
+    // std::cout << "j=" << j << "\n";
     for (double i = 0; i < ndofs_local; ++i)
     {
-      // x.mutable_array()[i] = sin(i / ndofs_local);
+      x.mutable_array()[i] = sin(i / ndofs_local);
       // x.mutable_array()[i] = 1.;
-      x.mutable_array()[i] = 0;
+      // x.mutable_array()[i] = 0;
     }
-    x.mutable_array()[j] = 1.;
+    // x.mutable_array()[j] = 1.;
 
   
     x_d.copy_from_host(x);
@@ -200,10 +168,10 @@ void solver(MPI_Comm comm, po::variables_map vm)
 
     {
       auto start = std::chrono::high_resolution_clock::now();
-      // for (int i = 0; i < nreps; ++i)
-      // {
+      for (int i = 0; i < nreps; ++i)
+      {
         gpu_action_baseline(x_d, y_d);
-      // }
+      }
       auto stop = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> duration = stop - start;
       std::cout << "Baseline Mat-free Matvec time: " << duration.count()
@@ -213,10 +181,10 @@ void solver(MPI_Comm comm, po::variables_map vm)
     }
     {
       auto start = std::chrono::high_resolution_clock::now();
-      // for (int i = 0; i < nreps; ++i)
-      // {
+      for (int i = 0; i < nreps; ++i)
+      {
         gpu_action_sf(x_d, y_d);
-      // }
+      }
       auto stop = std::chrono::high_resolution_clock::now();
       std::chrono::duration<double> duration = stop - start;
       std::cout << "SF Mat-free Matvec time: " << duration.count()
@@ -224,22 +192,28 @@ void solver(MPI_Comm comm, po::variables_map vm)
       std::cout << "SF Mat-free action Gdofs/s: "
                 << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
     }
-  }
-  // {
-  //   auto start = std::chrono::high_resolution_clock::now();
-  //   for (int i = 0; i < nreps; ++i) {
-  //     gpu_action(x_d, y_d);
-  //   }
-  //   auto stop = std::chrono::high_resolution_clock::now();
-  //   std::chrono::duration<double> duration = stop - start;
-  //   std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
-  //   std::cout << "SF OTF Mat-free action Gdofs/s: "
-  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   // }
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < nreps; ++i) {
+      gpu_action(x_d, y_d);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = stop - start;
+    std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "SF OTF Mat-free action Gdofs/s: "
+              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  }
 
   // std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
-  // if (matrix_comparison) {
+  // if (matrix_comparison && std::is_same_v<T, PetscScalar>) {
+  // Action of the bilinear form "a" on a function ui
+  // auto ui = std::make_shared<fem::Function<T>>(V);
+  // auto M = std::make_shared<fem::Form<T>>(
+  //     fem::create_form<T>(*form_mat_free_mass3D_M, {V},
+  //                         {{"ui", ui}, {"alpha", alpha}}, {}, {}, {}));
+
   //   la::Vector<T> y_h(map, map_bs);
   //   thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
   //                y_h.mutable_array().begin());
@@ -288,19 +262,16 @@ void solver(MPI_Comm comm, po::variables_map vm)
 /// Main program
 int main(int argc, char *argv[])
 {
-  using T = PetscScalar;
-  using U = typename dolfinx::scalar_value_t<T>;
-  // using U = SCALAR_TYPE;
   init_logging(argc, argv);
   MPI_Init(&argc, &argv);
   {
     MPI_Comm comm{MPI_COMM_WORLD};
-    int rank = 0, size = 0;
+    int rank, size;
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
     auto vm = get_cli_config(argc, argv);
 
-    solver<T, U>(MPI_COMM_WORLD, vm);
+    solver<T>(MPI_COMM_WORLD, vm);
   }
   MPI_Finalize();
   return 0;

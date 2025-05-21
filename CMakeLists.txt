@@ -7,6 +7,12 @@ option(amd "Build for AMD GPUs"	off)
 set(polynomial_degree 5 CACHE STRING "Polynomial degree")
 set(scalar_type "float64" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
+message(STATUS "Scalar type: ${scalar_type}")
+
+if(NOT scalar_type STREQUAL "float32" AND NOT scalar_type STREQUAL "float64")
+  message(FATAL_ERROR
+    "Invalid scalar_type '${scalar_type}'. Valid values: float32, float64")
+endif()
 
 if(cpu AND nvidia OR cpu AND amd)
   message(FATAL_ERROR "You cannot select both a cpu build and a GPU (amd or nvidia) build. Only select one of the three options: cpu, nvidia, amd")
@@ -49,6 +55,7 @@ elseif(nvidia)
   # See https://arnon.dk/matching-sm-architectures-arch-and-gencode-for-various-nvidia-cards/
   # set(CMAKE_CUDA_ARCHITECTURES 86 89 90a)  # RTX A4000
   set(CMAKE_CUDA_ARCHITECTURES 89)  # RTX A4000
+  # set(CMAKE_CUDA_ARCHITECTURES 80)  # A100
   set(CMAKE_CUDA_STANDARD 20)
   enable_language(CUDA)
 endif()
@@ -63,8 +70,8 @@ if (DEFINED ENV{CRAYPE_VERSION})
   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -Ofast -march=native -I/opt/cray/pe/mpich/8.1.27/ofi/gnu/9.1/include")
 endif()
 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
-# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
 if(NOT TARGET dolfinx)
   find_package(DOLFINX REQUIRED)

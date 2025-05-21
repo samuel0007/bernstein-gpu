@@ -243,17 +243,17 @@ public:
 
     // auto element_p = this->V->element();
     // std::vector<int> dof_reordering = get_tp_ordering2D<P>(element_p);
-    std::vector<int> dof_reordering = {0, 4, 1, 3, 2, 6, 5, 9, 8, 7};
+    // std::vector<int> dof_reordering = {0, 4, 1, 3, 2, 6, 5, 9, 8, 7};
     // std::vector<int> dof_reordering = {0, 1, 2, 3};
-    // std::vector<int> dof_reordering = lex_dof_ordering(
-    //   basix::element::family::P, basix::cell::type::tetrahedron, P);
+    std::vector<int> dof_reordering = lex_dof_ordering(
+      basix::element::family::P, basix::cell::type::tetrahedron, P);
     // std::vector<int> dof_reordering = {0, 1, 2, 3};
     // std::vector<int> dof_reordering = {0, } 
     // std::reverse(dof_reordering.begin(), dof_reordering.end());
-    for(int i = 0; i < dof_reordering.size(); ++i) {
-      dof_reordering[i] = i;
-      std::cout << "i=" << dof_reordering[i] << "\n";
-    }
+    // for(int i = 0; i < dof_reordering.size(); ++i) {
+      // dof_reordering[i] = i;
+      // std::cout << "i=" << dof_reordering[i] << "\n";
+    // }
     assert(dof_reordering.size() == K);
 
     const std::size_t tdim = mesh->topology()->dim();

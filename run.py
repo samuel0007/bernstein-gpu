@@ -36,6 +36,12 @@ def main():
         type=int,
         help="Polynomial degree (compile-time P)"
     )
+    parser.add_argument(
+        "--scalar-type",
+        choices=["float32", "float64"],
+        required=True,
+        help="Scalar type (float32 or float64)"
+    )
     parser.add_argument("--rebuild", action="store_true", help="Force clean build before building")
 
     args = parser.parse_args()
@@ -44,7 +50,6 @@ def main():
     if sum(bool(t) for t in targets) != 1:
         sys.exit("Error: Exactly one of --cpu, --nvidia or --amd must be set")
 
-    
 
     cmake_defs = []
     if args.cpu:
@@ -55,6 +60,7 @@ def main():
         cmake_defs += ["-Damd=ON"]
     if args.degree is not None:
         cmake_defs.append(f"-Dpolynomial_degree={args.degree}")
+    cmake_defs.append(f"-Dscalar_type={args.scalar_type}")
 
     os.makedirs(args.build_dir, exist_ok=True)
 

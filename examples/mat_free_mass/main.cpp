@@ -25,8 +25,7 @@
 using namespace dolfinx;
 namespace po = boost::program_options;
 
-using T = PetscScalar;
-using U = typename dolfinx::scalar_value_t<T>;
+using T = SCALAR_TYPE;
 
 #if USE_HIP
 using DeviceVector = dolfinx::acc::Vector<T, acc::Device::HIP>;
@@ -40,26 +39,8 @@ static_assert(false)
 #define POLYNOMIAL_DEGREE 10
 #endif
 
-namespace linalg {
-
-template <typename T> void copy(const la::Vector<T> &in, la::Vector<T> &out) {
-  std::span<const T> _in = in.array();
-  std::span<T> _out = out.mutable_array();
-  std::copy(_in.begin(), _in.end(), _out.begin());
-}
-
-/// @brief Compute vector r = alpha * x + y.
-/// @param[out] r
-/// @param[in] alpha
-/// @param[in] x
-/// @param[in] y
-void axpy(auto &&r, auto alpha, auto &&x, auto &&y) {
-  std::ranges::transform(x.array(), y.array(), r.mutable_array().begin(),
-                         [alpha](auto x, auto y) { return alpha * x + y; });
-}
-} // namespace linalg
-
-po::variables_map get_cli_config(int argc, char *argv[]) {
+po::variables_map get_cli_config(int argc, char *argv[])
+{
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
@@ -79,8 +60,9 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
   return vm;
 }
 
-template <typename T, std::floating_point U>
-void solver(MPI_Comm comm, po::variables_map vm) {
+template <std::floating_point T>
+void solver(MPI_Comm comm, po::variables_map vm)
+{
   constexpr int polynomial_degree = POLYNOMIAL_DEGREE;
   // TODO: verify if expression integrates exactly. Probably? Comes from Basix.
   // constexpr int quadrature_points = (polynomial_degree + 2) / 2;
@@ -92,34 +74,28 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
-  auto mesh = std::make_shared<mesh::Mesh<U>>(mesh::create_rectangle<U>(
+  auto mesh = std::make_shared<mesh::Mesh<T>>(mesh::create_rectangle<T>(
       comm, {{{0.0, 0.0}, {1.0, 1.0}}}, {nelements, nelements},
       mesh::CellType::triangle,
       mesh::create_cell_partitioner(mesh::GhostMode::none)));
-  auto element = basix::create_element<U>(
+  auto element = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::triangle, polynomial_degree,
       basix::element::lagrange_variant::bernstein,
       basix::element::dpc_variant::unset, false);
 
-  auto element_DG = basix::create_element<U>(
+  auto element_DG = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::triangle, 0,
       basix::element::lagrange_variant::unset,
       basix::element::dpc_variant::unset, true);
 
-  auto V = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element)));
+  auto V = std::make_shared<fem::FunctionSpace<T>>(
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
 
-  auto V_DG = std::make_shared<fem::FunctionSpace<U>>(
-      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<U>>(element_DG)));
+  auto V_DG = std::make_shared<fem::FunctionSpace<T>>(
+      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
 
   auto alpha = std::make_shared<fem::Function<T>>(V_DG);
   alpha->x()->set(0.5);
-
-  // Action of the bilinear form "a" on a function ui
-  auto ui = std::make_shared<fem::Function<T, U>>(V);
-  auto M = std::make_shared<fem::Form<T, U>>(
-      fem::create_form<T>(*form_mat_free_mass_M, {V},
-                          {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
 
   const std::size_t tdim = mesh->topology()->dim();
   std::size_t ncells = mesh->topology()->index_map(tdim)->size_global();
@@ -156,11 +132,11 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   }
 
   // ----------- 2. GPU Matrix Free setup -----------
-  acc::MatFreeMassSF<U, polynomial_degree, quadrature_points> gpu_action_sf(
-    mesh, V, alpha->x()->array());
-  acc::MatFreeMass<U, polynomial_degree, quadrature_points> gpu_action(
+  acc::MatFreeMassSF<T, polynomial_degree, quadrature_points> gpu_action_sf(
       mesh, V, alpha->x()->array());
-  acc::MatFreeMassBaseline<U, polynomial_degree, quadrature_points>
+  acc::MatFreeMass<T, polynomial_degree, quadrature_points> gpu_action(
+      mesh, V, alpha->x()->array());
+  acc::MatFreeMassBaseline<T, polynomial_degree, quadrature_points>
       gpu_action_baseline(mesh, V, alpha->x()->array());
 
   // ----------- 3. Matrix Free apply -----------
@@ -171,7 +147,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   // CPU
   la::Vector<T> x(map, map_bs);
 
-  for (double i = 0; i < ndofs_local; ++i) {
+  for (double i = 0; i < ndofs_local; ++i)
+  {
     x.mutable_array()[i] = sin(i / ndofs_local);
     // x.mutable_array()[i] = 1.;
   }
@@ -179,13 +156,14 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   // GPU
   DeviceVector x_d(map, map_bs);
   DeviceVector y_d(map, map_bs);
-  y_d.set(U{0.0});
+  y_d.set(T{0.0});
   x_d.copy_from_host(x);
   std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
   {
     auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
+    for (int i = 0; i < nreps; ++i)
+    {
       gpu_action_baseline(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
@@ -197,7 +175,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   }
   {
     auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
+    for (int i = 0; i < nreps; ++i)
+    {
       gpu_action_sf(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
@@ -209,7 +188,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   }
   {
     auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
+    for (int i = 0; i < nreps; ++i)
+    {
       gpu_action(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
@@ -221,7 +201,14 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
-  if (matrix_comparison) {
+  if (matrix_comparison && std::is_same_v<T, PetscScalar>)
+  {
+    // Action of the bilinear form "a" on a function ui
+    auto ui = std::make_shared<fem::Function<T>>(V);
+    auto M = std::make_shared<fem::Form<T>>(
+        fem::create_form<T>(*form_mat_free_mass_M, {V},
+                            {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
+
     la::Vector<T> y_h(map, map_bs);
     thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
                  y_h.mutable_array().begin());
@@ -231,7 +218,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::vector<T> constants = fem::pack_constants(*M);
 
     // Create function for computing the action of A on x (y = Ax)
-    auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
+    auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y)
+    {
       y.set(0.0);
 
       // Update coefficient ui (just copy data from x to ui)
@@ -256,8 +244,10 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::cout << "norm(y)=" << la::norm(y) << "\n";
     double eps = 1e-6;
     bool check = true;
-    for (int i = 0; i < ndofs_local; ++i) {
-      if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
+    for (int i = 0; i < ndofs_local; ++i)
+    {
+      if (std::abs(y.array()[i] - y_h.array()[i]) > eps)
+      {
         check = false;
         break;
       }
@@ -267,19 +257,18 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 }
 
 /// Main program
-int main(int argc, char *argv[]) {
-  using T = PetscScalar;
-  using U = typename dolfinx::scalar_value_t<T>;
+int main(int argc, char *argv[])
+{
   init_logging(argc, argv);
   MPI_Init(&argc, &argv);
   {
     MPI_Comm comm{MPI_COMM_WORLD};
-    int rank = 0, size = 0;
+    int rank, size;
     MPI_Comm_rank(comm, &rank);
     MPI_Comm_size(comm, &size);
     auto vm = get_cli_config(argc, argv);
 
-    solver<T, U>(MPI_COMM_WORLD, vm);
+    solver<T>(MPI_COMM_WORLD, vm);
   }
   MPI_Finalize();
   return 0;

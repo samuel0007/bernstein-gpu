@@ -182,7 +182,7 @@ public:
     // std::vector<int> dof_reordering = {0, 1, 2, 3};
     // std::reverse(dof_reordering.begin(), dof_reordering.end());
     for(int i = 0; i < dof_reordering.size(); ++i) {
-      std::cout << "i=" << dof_reordering[i] << "\n";
+      // std::cout << "i=" << dof_reordering[i] << "\n";
     }
     assert(dof_reordering.size() == K);
     
