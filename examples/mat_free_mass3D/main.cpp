@@ -9,6 +9,7 @@
 #include <dolfinx/common/types.h>
 #include <dolfinx/fem/Constant.h>
 #include <memory>
+#include <format>
 #include <petscsystypes.h>
 
 #include "src/geometry.hpp"

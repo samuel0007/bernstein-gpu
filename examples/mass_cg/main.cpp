@@ -10,6 +10,7 @@
 #include <dolfinx/fem/Constant.h>
 #include <dolfinx/io/XDMFFile.h>
 #include <memory>
+#include <format>
 #include <petscsystypes.h>
 
 #include "src/cg_gpu.hpp"
