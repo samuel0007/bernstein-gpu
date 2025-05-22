@@ -65,8 +65,6 @@ template <std::floating_point T>
 void solver(MPI_Comm comm, po::variables_map vm)
 {
   constexpr int polynomial_degree = POLYNOMIAL_DEGREE;
-  // TODO: verify if expression integrates exactly. Probably? Comes from Basix.
-  // constexpr int quadrature_points = (polynomial_degree + 2) / 2;
   constexpr int quadrature_points = polynomial_degree + 2;
 
   const int nelements = vm["nelements"].as<int>();

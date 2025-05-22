@@ -217,6 +217,28 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
   // printf("qvals[%d]=%f \n", tx, qval);
 }
 
+
+template <typename T, int nd, int nq>
+__global__ void mass_diagonal_inv(T *__restrict__ out_dofs,
+                                       const T *__restrict__ alpha_cells,
+                                       const T *__restrict__ detJ_cells,
+                                       const std::int32_t *__restrict__ dofmap,
+                                       const T *__restrict__ phi) {
+  const int tx = threadIdx.x;
+  const int cell_idx = blockIdx.x;
+  int g_dof_idx = dofmap[tx + nd * cell_idx];
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
+  T detJ_abs = detJ_cells[cell_idx * nq]; // Constant for affine triangles
+
+  T qval = 0.;
+  for (int i = 0; i < nq; ++i) {
+    T phi_l = phi[i * nd + tx];
+    qval += phi_l * phi_l;
+  }
+
+  out_dofs[g_dof_idx] = 1. / (qval * alpha * detJ_abs);
+}
+
 template <typename T, int Q> __constant__ T qwts2_d[Q];
 template <typename T, int Q> __constant__ T qpts2_d[Q];
 
