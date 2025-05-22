@@ -1,0 +1,114 @@
+-- Polynomial degree: 6
+-- Compiling for NVIDIA GPUs
+CMake Warning (dev) at /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/dolfinx/DOLFINXConfig.cmake:49 (find_package):
+  Policy CMP0144 is not set: find_package uses upper-case <PACKAGENAME>_ROOT
+  variables.  Run "cmake --help-policy CMP0144" for policy details.  Use the
+  cmake_policy command to set the policy and suppress this warning.
+
+  Environment variable BOOST_ROOT is set to:
+
+    /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view
+
+  For compatibility, find_package is ignoring the variable, but code in a
+  .cmake module might still use it.
+Call Stack (most recent call first):
+  CMakeLists.txt:64 (find_package)
+This warning is for project developers.  Use -Wno-dev to suppress it.
+
+-- Found Boost 1.87.0 at /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED COMPONENTS timer
+-- Found boost_headers 1.87.0 at /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/boost_headers-1.87.0
+-- Found boost_timer 1.87.0 at /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/boost_timer-1.87.0
+--   [x] libboost_timer.so.1.87.0
+--   [ ] libboost_timer.a
+-- Adding boost_timer dependencies: headers
+-- Found Boost: /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70") found components: timer 
+-- Checking for Basix hints with /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/bin/python3
+-- Adding /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/python3.12/site-packages/basix to Basix search hints
+-- Found HDF5 at /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/cmake via NO_MODULE. Now trying to extract locations etc.
+-- Trying to get properties of target hdf5-shared
+-- Found imported configurations: RELEASE
+-- Start search through imported configurations in the following order: Debug;RELWITHDEBINFO;RELEASE;DEBUG;RELEASE
+-- Selected imported configuration: RELEASE
+-- HDF5_DIR: /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/cmake
+-- HDF5_DEFINITIONS: 
+-- HDF5_INCLUDE_DIRS: /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/include
+-- HDF5_LIBRARIES: hdf5-shared
+-- HDF5_HL_LIBRARIES: 
+-- HDF5_C_DEFINITIONS: 
+-- HDF5_C_INCLUDE_DIR: 
+-- HDF5_C_INCLUDE_DIRS: /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/include
+-- HDF5_C_LIBRARY: /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/libhdf5.so.310.5.0
+-- HDF5_C_LIBRARIES: hdf5-shared
+-- HDF5_C_HL_LIBRARY: 
+-- HDF5_C_HL_LIBRARIES: 
+-- Defined targets (if any):
+-- ... hdf5::hdf5
+-- ... hdf5-static
+-- ... hdf5-shared
+-- Found Boost 1.87.0 at /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED COMPONENTS program_options
+-- Found boost_program_options 1.87.0 at /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/boost_program_options-1.87.0
+--   [x] libboost_program_options.so.1.87.0
+--   [ ] libboost_program_options.a
+-- Adding boost_program_options dependencies: headers
+-- Found Boost: /local/data/public/sr2120/spack/var/spack/environments/nfenics-env/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70") found components: program_options 
+-- Configuring done (1.0s)
+-- Generating done (0.0s)
+-- Build files have been written to: /local/data/public/sr2120/bernstein-gpu/build
+[ 25%] Compiling mat_free_mass.py
+[ 50%] Building CUDA object CMakeFiles/mat_free_mass.dir/examples/mat_free_mass/main.cpp.o
+/local/data/public/sr2120/bernstein-gpu/src/mass_baseline.hpp(84): warning #177-D: variable "nq" was declared but never referenced
+      constexpr int nq = 6 * (P == 2) + 12 * (P == 3) + 16 * (P == 4) +
+                    ^
+          detected during:
+            instantiation of "dolfinx::acc::MatFreeMassBaseline<T, P, Q>::MatFreeMassBaseline(std::shared_ptr<dolfinx::mesh::Mesh<T>>, std::shared_ptr<dolfinx::fem::FunctionSpace<T>>, std::span<const T, 18446744073709551615UL>) [with T=T, P=6, Q=7]" at line 161 of /local/data/public/sr2120/bernstein-gpu/examples/mat_free_mass/main.cpp
+            instantiation of "void solver<T,U>(MPI_Comm, boost::program_options::variables_map) [with T=PetscScalar, U=T]" at line 267 of /local/data/public/sr2120/bernstein-gpu/examples/mat_free_mass/main.cpp
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+/local/data/public/sr2120/bernstein-gpu/src/mass.hpp(116): warning #177-D: variable "K" was declared but never referenced
+      constexpr int K = (N + 1) * N / 2;
+                    ^
+          detected during instantiation of "void solver<T,U>(MPI_Comm, boost::program_options::variables_map) [with T=PetscScalar, U=T]" at line 267 of /local/data/public/sr2120/bernstein-gpu/examples/mat_free_mass/main.cpp
+
+[ 75%] Building C object CMakeFiles/mat_free_mass.dir/mat_free_mass.c.o
+[100%] Linking CUDA executable mat_free_mass
+[100%] Built target mat_free_mass
+Num devices: 2
+Device: NVIDIA A30: 8.0
+  Global memory:   24062 Mb
+  Shared memory:   48 kb
+  Constant memory: 0 Mb
+  Block registers: 65536
+
+  Warp size:         32
+  Threads per block: 1024
+  Max block dimensions: [ 1024, 1024, 64 ]
+  Max grid dimensions:  [ 2147483647, 65535, 65535 ]
+-----------------------------------
+Polynomial degree: 6
+Number of quadrature points (1D): 7
+Number of dofs per element: 28
+Number of cells-global: 131072
+Number of dofs-global: 2362369
+Number of dofs-local: 2362369
+Number of repetitions: 500
+Scalar Type: float64
+-----------------------------------
+Sent dofmap to GPU (size = 14680064 bytes)
+Sent alpha to GPU (size = 1048576 bytes)
+Send geometry to GPU (size = 51380224 bytes)
+Sent dofmap to GPU (size = 14680064 bytes)
+Sent alpha to GPU (size = 1048576 bytes)
+Table size = 924, qxn: 33x28
+Send geometry to GPU (size = 34603008 bytes)
+norm(x_d)=1537
+Baseline Mat-free Matvec time: 0.594434
+Baseline Mat-free action Gdofs/s: 1.98707
+Mat-free Matvec time: 3.30731
+Mat-free action Gdofs/s: 0.357143
+norm(y_d)=0.000375285
+$ cmake -S . -B build -Dnvidia=ON -Dpolynomial_degree=6
+$ cmake --build build --target mat_free_mass --clean-first
+$ build/mat_free_mass --nelements 256 --nreps 500
