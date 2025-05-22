@@ -1,0 +1,29 @@
+Num devices: 1
+Device: NVIDIA A100-SXM4-80GB: 8.0
+  Global memory:   81037 Mb
+  Shared memory:   48 kb
+  Constant memory: 0 Mb
+  Block registers: 65536
+
+  Warp size:         32
+  Threads per block: 1024
+  Max block dimensions: [ 1024, 1024, 64 ]
+  Max grid dimensions:  [ 2147483647, 65535, 65535 ]
+-----------------------------------
+Polynomial degree: 7
+Number of quadrature points (1D): 9
+Number of dofs per element: 36
+Number of cells-global: 131072
+Number of dofs-global: 3214849
+Number of dofs-local: 3214849
+Number of repetitions: 500
+Scalar Type: float32
+-----------------------------------
+norm(x_d)=936.275
+Baseline Mat-free Matvec time: 0.399238
+Baseline Mat-free action Gdofs/s: 4.02623
+SF Mat-free Matvec time: 0.213522
+SF Mat-free action Gdofs/s: 7.52814
+SF OTF Mat-free Matvec time: 1.79706
+SF OTF Mat-free action Gdofs/s: 0.894474
+norm(y_d)=0.000166168

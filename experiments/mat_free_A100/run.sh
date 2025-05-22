@@ -8,11 +8,14 @@ spack load cuda
 spack load cmake
 
 # float 32
-for p in 2 3 4 5 6 7 8 9; do
-    python run.py mat_free_mass --scalar-type float32 --nvidia -p $p --rebuild --run-args --nelements $nelements --nreps 500 2>&1 | tee experiments/$EXPERIMENT/log_32s_$p.txt
+for s in float32 float64; do
+    for p in 2 3 4 5 6 7 8 9; do
+        cd build
+        cmake .. -Dscalar_type=$s -Dpolynomial_degree=$p -Dnvidia=On -Damd=off
+        make mat_free_mass
+        cd ..
+        mpirun -n 1 build/mat_free_mass --nreps 500 --nelements 256 2>&1 | tee experiments/$EXPERIMENT/log_${s}_$p.txt
+    done
 done
 
-# float 64
-for p in 2 3 4 5 6 7 8 9; do
-    python run.py mat_free_mass --scalar-type float64 --nvidia -p $p --rebuild --run-args --nelements $nelements --nreps 500 2>&1 | tee experiments/$EXPERIMENT/log_64s_$p.txt
-done
+
