@@ -2,6 +2,26 @@ import pygmsh
 import math
 import gmsh
 
+filename = "data/transducer.msh"
+# TYPE = "spherical"
+TYPE = "planar"
+D = 3
+R = 0.064 if TYPE == "spherical" else 0.01 # [m]
+
+A = 0.064 # [m]
+H = 0.120 # [m]
+W = 0.070 # [m]
+frequency = 0.5e6 # [Hz]
+speedOfSound = 1500 # [m/s]
+wavelength = speedOfSound / frequency # [m]
+elementsPerWavelength = 2.5 # [elements]
+inflow_marker = 1
+outflow_marker = 2
+volume_marker = 1
+
+h = wavelength / elementsPerWavelength
+
+
 def add_spherical_transducer_2d(model, radius_of_curvature, aperture_diameter, box_length, h):
     a = aperture_diameter / 2.0
     s = radius_of_curvature - math.sqrt(radius_of_curvature**2 - a**2)
@@ -22,7 +42,7 @@ def add_spherical_transducer_2d(model, radius_of_curvature, aperture_diameter, b
     outflow_b = [l1, l2, l3]
     boundary = model.add_curve_loop([arc, *outflow_b])
     surface = model.add_plane_surface(boundary)
-    return arc, outflow_b, surface
+    return arc, outflow_b, [surface]
 
 def add_planar_transducer_2d(model, radius, box_length, box_width, h):
     a = radius
@@ -53,7 +73,7 @@ def add_planar_transducer_2d(model, radius, box_length, box_width, h):
     boundary = model.add_curve_loop([l_tl, inflow, l_tr, l_r, l_b, l_l])
     surface  = model.add_plane_surface(boundary)
 
-    return inflow, outflow, surface
+    return inflow, outflow, [surface]
 
 # def add_spherical_transducer_3d(radius_of_curvature, aperture_diameter, box_length, mesh_size):
 #     a = aperture_diameter/2.0
@@ -101,6 +121,7 @@ def add_planar_transducer_2d(model, radius, box_length, box_width, h):
 #     return inlet, outflow, fused[1]
 
 
+
 def add_planar_transducer_3d(model, radius, box_length, box_width, h):
     R = box_width/2.0
 
@@ -117,7 +138,7 @@ def add_planar_transducer_3d(model, radius, box_length, box_width, h):
     a3o = model.add_circle_arc(p3o, pco, p0o)
 
     outer_loop = model.add_curve_loop([a0o, a1o, a2o, a3o])
-    outer_surf = model.add_plane_surface(outer_loop)
+    # outer_surf = model.add_plane_surface(outer_loop)
 
     # --- inlet circle ---
     p0i = model.add_point([ radius,  0.0, 0.0], mesh_size=h)
@@ -139,35 +160,28 @@ def add_planar_transducer_3d(model, radius, box_length, box_width, h):
     annulus_surf = model.add_plane_surface(outer_loop, [inlet_loop])
 
 
-    # --- extrude the big circle downwards to form your cylinder ---
-    # The return list has:
-    top_surf, volume_ent, lateral_surfs = model.extrude(
-        outer_surf,
-        [0, 0, -box_length],
+
+    # --- extrude annulus ⇒ hollow cylinder volume + its lateral walls + top ring ---
+    top_annulus, vol_annulus, lateral_annulus = model.extrude(
+        annulus_surf,
+        [0, 0, -box_length]
     )
-    outflow_surfs = [annulus_surf, top_surf] + lateral_surfs
 
-    return inlet_surf, outflow_surfs, volume_ent
+    # --- extrude inlet disk ⇒ small cylinder (transducer) + its lateral walls + top cap ---
+    top_inlet, vol_inlet, lateral_inlet = model.extrude(
+        inlet_surf,
+        [0, 0, -box_length]
+    )
+
+    # collect surfaces:
+    outflow_surfs = [top_annulus, annulus_surf, top_inlet] + lateral_annulus[:4]
+    inlet_surfs   = inlet_surf
+
+    # return lists of tags (you can assign physical groups thereafter)
+    return inlet_surfs, outflow_surfs, [vol_annulus, vol_inlet]
 
 
-filename = "transducer.geo_unrolled"
-TYPE = "spherical"
-# TYPE = "planar"
-D = 3
-R = 0.064 if TYPE == "spherical" else 0.01 # [m]
 
-A = 0.064 # [m]
-H = 0.120 # [m]
-W = 0.070 # [m]
-frequency = 500000 # [Hz]
-speedOfSound = 1500 # [m/s]
-wavelength = speedOfSound / frequency # [m]
-elementsPerWavelength = 3
-inflow_marker = 1
-outflow_marker = 2
-volume_marker = 1
-
-h = wavelength / elementsPerWavelength
 print("Generating mesh:")
 print("\tSpeed of sound: ", speedOfSound)
 print("\tRadius of curvature: ", R)
@@ -192,10 +206,11 @@ with pygmsh.occ.Geometry() as geom:
         raise ValueError("Invalid transducer type. Choose 'spherical' or 'planar'.")
     geom.synchronize()
     gmsh.model.addPhysicalGroup(D - 1, [inflow_b.dim_tags[0][1]], inflow_marker)
-    gmsh.model.setPhysicalName(1, inflow_marker, "Inflow")
+    # gmsh.model.setPhysicalName(1, inflow_marker, "Inflow")
     gmsh.model.addPhysicalGroup(D - 1, [outflow_b[i].dim_tags[0][1] for i in range(len(outflow_b))], outflow_marker)
-    gmsh.model.setPhysicalName(1, outflow_marker, "Outflow")
-    gmsh.model.addPhysicalGroup(D, [surface.dim_tags[0][1]], volume_marker)
-    gmsh.model.setPhysicalName(2, volume_marker, "Volume")
+    # gmsh.model.setPhysicalName(1, outflow_marker, "Outflow")
+    gmsh.model.addPhysicalGroup(D, [surface[i].dim_tags[0][1] for i in range(len(surface))], volume_marker)
+    # gmsh.model.setPhysicalName(2, volume_marker, "Volume")
+    gmsh.model.mesh.generate(3)
     
     gmsh.write(filename)

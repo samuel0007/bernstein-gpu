@@ -23,7 +23,8 @@ geom_dim = int(sys.argv[2])
 geom_ord = int(sys.argv[3])
 
 if mesh_comm.rank == model_rank:
-    gmsh.model.mesh.generate(geom_dim)
+    if(not fname.endswith(".msh")):
+        gmsh.model.mesh.generate(geom_dim)
 
     if geom_ord > 1:
         gmsh.model.mesh.setOrder(geom_ord)
@@ -34,7 +35,6 @@ mesh_data = gmshio.model_to_mesh(
 msh = mesh_data.mesh
 ct = mesh_data.cell_tags
 ft = mesh_data.facet_tags
-
 with XDMFFile(msh.comm, "mesh.xdmf", "w") as file:
     file.write_mesh(msh)
     msh.topology.create_connectivity(geom_dim-1, geom_dim)

@@ -1,0 +1,69 @@
+$ cmake -S . -B build -Dnvidia=ON -Dpolynomial_degree=6 -Dscalar_type=float64
+-- Polynomial degree: 6
+-- Scalar type: float64
+-- Compiling for NVIDIA GPUs
+-- Found Boost 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED
+-- Found boost_headers 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/boost_headers-1.87.0
+-- Found Boost: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70")  
+-- Checking for Basix hints with /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/bin/python3
+-- Adding /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/python3.12/site-packages/basix to Basix search hints
+-- Found HDF5 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/cmake via NO_MODULE. Now trying to extract locations etc.
+-- Trying to get properties of target hdf5-shared
+-- Found imported configurations: RELEASE
+-- Start search through imported configurations in the following order: Release;RELWITHDEBINFO;RELEASE;DEBUG;RELEASE
+-- Selected imported configuration: RELEASE
+-- HDF5_DIR: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/cmake
+-- HDF5_DEFINITIONS: 
+-- HDF5_INCLUDE_DIRS: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/include
+-- HDF5_LIBRARIES: hdf5-shared
+-- HDF5_HL_LIBRARIES: 
+-- HDF5_C_DEFINITIONS: 
+-- HDF5_C_INCLUDE_DIR: 
+-- HDF5_C_INCLUDE_DIRS: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/include
+-- HDF5_C_LIBRARY: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/libhdf5.so.310.5.0
+-- HDF5_C_LIBRARIES: hdf5-shared
+-- HDF5_C_HL_LIBRARY: 
+-- HDF5_C_HL_LIBRARIES: 
+-- Defined targets (if any):
+-- ... hdf5::hdf5
+-- ... hdf5-static
+-- ... hdf5-shared
+-- Found Boost 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED COMPONENTS program_options
+-- Found boost_program_options 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/boost_program_options-1.87.0
+--   [x] libboost_program_options.so.1.87.0
+--   [ ] libboost_program_options.a
+-- Adding boost_program_options dependencies: headers
+-- Found Boost: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70") found components: program_options 
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/sr2120/fenicsx-test/build
+$ cmake --build build --target mass_cg --clean-first
+[1/1] Cleaning all built files...
+Cleaning... 4 files.
+[1/4] Compiling mass_cg.py
+[2/4] Building C object CMakeFiles/mass_cg.dir/mass_cg.c.o
+[3/4] Building CUDA object CMakeFiles/mass_cg.dir/examples/mass_cg/main.cpp.o
+[4/4] Linking CUDA executable mass_cg
+$ build/mass_cg
+Num devices: 1
+Device: NVIDIA RTX 6000 Ada Generation: 8.9
+  Global memory:   48632 Mb
+  Shared memory:   48 kb
+  Constant memory: 0 Mb
+  Block registers: 65536
+
+  Warp size:         32
+  Threads per block: 1024
+  Max block dimensions: [ 1024, 1024, 64 ]
+  Max grid dimensions:  [ 2147483647, 65535, 65535 ]
+ncells=19538
+ndofs_global=352825
+ndofs_local=352825
+Sent dofmap to GPU (size = 2188256 bytes)
+Sent alpha to GPU (size = 2822600 bytes)
+Table size = 1176, qxn: 42x28
+Send geometry to GPU (size = 6564768 bytes)
+Number of GPU PCG iterations 93
+Number of GPU CG iterations 298

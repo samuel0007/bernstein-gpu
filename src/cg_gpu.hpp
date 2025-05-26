@@ -150,6 +150,13 @@ public:
   template <typename Operator>
   int solve(Operator& A, Vector& x, const Vector& b, bool jacobi = true, bool verbose = false)
   {
+    // _r->set(0.);
+    // _y->set(0.);
+    // _p->set(0.);
+    // _diag_inv->set(0.);
+    // _y = std::make_unique<Vector>(_map, _bs);
+    // _p = std::make_unique<Vector>(_map, _bs);
+    
     MPI_Comm comm = _map->comm();
     int rank;
     MPI_Comm_rank(comm, &rank);

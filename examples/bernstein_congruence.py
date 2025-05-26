@@ -9,8 +9,10 @@ from ufl import dx, grad, inner
 from scipy.sparse.linalg import eigsh
 import basix
 
-bases = [basix.LagrangeVariant.equispaced, basix.LagrangeVariant.bernstein]
-degree = 2
+bases = [basix.LagrangeVariant.gll_warped, basix.LagrangeVariant.bernstein]
+degree = 4
+c = 1500
+dt = 0.01
 print(f"Asserting congruence of Bernstein and other Lagrange elements, degree {degree}.")
 for base in bases:
     print(f"Testing with base: {base}")
@@ -24,7 +26,7 @@ for base in bases:
     msh = mesh.create_rectangle(
         comm=MPI.COMM_WORLD,
         points=((0.0, 0.0), (2.0, 1.0)),
-        n=(32, 16),
+        n=(10, 10),
         cell_type=mesh.CellType.triangle,
     )
     V = fem.functionspace(msh, element)
@@ -32,8 +34,11 @@ for base in bases:
     u = ufl.TrialFunction(V)
     v = ufl.TestFunction(V)
 
-    # a = inner(grad(u), grad(v)) * dx
+    # this would arise from an implicit time-stepping scheme (like cranck-nicolson)
+    # a = inner(u, v) * dx + (dt**2/4)*c**2*inner(grad(u), grad(v)) * dx
     a = inner(u, v) * dx
+    # a = inner(grad(u), grad(v)) * dx
+    
 
     a_form = dolfinx.fem.form(a)
     A = dolfinx.fem.assemble_matrix(a_form)

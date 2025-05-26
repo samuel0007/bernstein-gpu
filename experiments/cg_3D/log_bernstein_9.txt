@@ -1,0 +1,86 @@
+$ cmake -S . -B build -Dnvidia=ON -Dpolynomial_degree=9 -Dscalar_type=float64
+-- Polynomial degree: 9
+-- Scalar type: float64
+-- Compiling for NVIDIA GPUs
+-- Found Boost 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED
+-- Found boost_headers 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/boost_headers-1.87.0
+-- Found Boost: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70")  
+-- Checking for Basix hints with /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/bin/python3
+-- Adding /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/python3.12/site-packages/basix to Basix search hints
+-- Found HDF5 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/cmake via NO_MODULE. Now trying to extract locations etc.
+-- Trying to get properties of target hdf5-shared
+-- Found imported configurations: RELEASE
+-- Start search through imported configurations in the following order: Release;RELWITHDEBINFO;RELEASE;DEBUG;RELEASE
+-- Selected imported configuration: RELEASE
+-- HDF5_DIR: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/cmake
+-- HDF5_DEFINITIONS: 
+-- HDF5_INCLUDE_DIRS: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/include
+-- HDF5_LIBRARIES: hdf5-shared
+-- HDF5_HL_LIBRARIES: 
+-- HDF5_C_DEFINITIONS: 
+-- HDF5_C_INCLUDE_DIR: 
+-- HDF5_C_INCLUDE_DIRS: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/include
+-- HDF5_C_LIBRARY: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/libhdf5.so.310.5.0
+-- HDF5_C_LIBRARIES: hdf5-shared
+-- HDF5_C_HL_LIBRARY: 
+-- HDF5_C_HL_LIBRARIES: 
+-- Defined targets (if any):
+-- ... hdf5::hdf5
+-- ... hdf5-static
+-- ... hdf5-shared
+-- Found Boost 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0
+--   Requested configuration: QUIET REQUIRED COMPONENTS program_options
+-- Found boost_program_options 1.87.0 at /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/boost_program_options-1.87.0
+--   [x] libboost_program_options.so.1.87.0
+--   [ ] libboost_program_options.a
+-- Adding boost_program_options dependencies: headers
+-- Found Boost: /home/sr2120/spack/var/spack/environments/mfenenv/.spack-env/view/lib/cmake/Boost-1.87.0/BoostConfig.cmake (found suitable version "1.87.0", minimum required is "1.70") found components: program_options 
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /home/sr2120/fenicsx-test/build
+$ cmake --build build --target mass3D_cg --clean-first
+[1/1] Cleaning all built files...
+Cleaning... 4 files.
+[1/4] Compiling mass3D_cg.py
+[2/4] Building C object CMakeFiles/mass3D_cg.dir/mass3D_cg.c.o
+[3/4] Building CUDA object CMakeFiles/mass3D_cg.dir/examples/mass3D_cg/main.cpp.o
+/home/sr2120/fenicsx-test/src/mass_baseline.hpp(256): warning #177-D: variable "nq" was declared but never referenced
+        constexpr int nq = 14 * (Q == 3) + 24 * (Q == 4) + 45 * (Q == 5) +
+                      ^
+          detected during:
+            instantiation of "dolfinx::acc::MatFreeMassBaseline3D<T, P, Q>::MatFreeMassBaseline3D(std::shared_ptr<dolfinx::mesh::Mesh<T>>, std::shared_ptr<dolfinx::fem::FunctionSpace<T>>, T) [with T=T, P=9, Q=11]" at line 131 of /home/sr2120/fenicsx-test/examples/mass3D_cg/main.cpp
+            instantiation of "void solver<T>(MPI_Comm, boost::program_options::variables_map) [with T=T]" at line 225 of /home/sr2120/fenicsx-test/examples/mass3D_cg/main.cpp
+
+Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
+
+[4/4] Linking CUDA executable mass3D_cg
+$ build/mass3D_cg
+Num devices: 1
+Device: NVIDIA RTX 6000 Ada Generation: 8.9
+  Global memory:   48632 Mb
+  Shared memory:   48 kb
+  Constant memory: 0 Mb
+  Block registers: 65536
+
+  Warp size:         32
+  Threads per block: 1024
+  Max block dimensions: [ 1024, 1024, 64 ]
+  Max grid dimensions:  [ 2147483647, 65535, 65535 ]
+ncells=8603
+ndofs_global=1086640
+ndofs_local=1086640
+Sent dofmap to GPU (size = 7570640 bytes)
+Sent alpha to GPU (size = 8693120 bytes)
+Table size = 292820, qxn: 1331x220
+Precomputing geometry
+Send geometry to GPU (size = 91604744 bytes)
+(/home/sr2120/fenicsx-test/src/util.hpp:41) Error: CUDA reports invalid configuration argument
+Traceback (most recent call last):
+  File "/home/sr2120/fenicsx-test/run.py", line 94, in <module>
+    main()
+  File "/home/sr2120/fenicsx-test/run.py", line 91, in main
+    subprocess.check_call(run_cmd)
+  File "/home/sr2120/spack/opt/spack/linux-ubuntu24.04-sapphirerapids/gcc-13.3.0/python-3.12.9-56bqso24ofcijtfu4d2kho27hckz4meu/lib/python3.12/subprocess.py", line 415, in check_call
+    raise CalledProcessError(retcode, cmd)
+subprocess.CalledProcessError: Command '['build/mass3D_cg']' returned non-zero exit status 1.

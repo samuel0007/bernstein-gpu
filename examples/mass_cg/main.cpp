@@ -133,11 +133,10 @@ void solver(MPI_Comm comm, po::variables_map vm)
   //                                                                      1.0);
 
   // ----------- 4. CG -----------
-  int max_iters = 500;
+  int max_iters = 2000;
   double rtol = 1e-7;
 
   // GPU
-
   dolfinx::acc::CGSolver<DeviceVector> cg(map, map_bs);
   cg.set_max_iterations(max_iters);
   cg.set_tolerance(rtol);

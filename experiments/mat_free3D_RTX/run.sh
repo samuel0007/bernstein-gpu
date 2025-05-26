@@ -1,12 +1,12 @@
 EXPERIMENT=mat_free3D_RTX
 
 nelements=10
-for p in 3 4 5 6 7 8 9 10 11 12; do
-    python run.py mat_free_mass3D --nvidia -p $p --rebuild --run-args --nelements $nelements --nreps 200 2>&1 | tee experiments/$EXPERIMENT/bp_log_$p.txt
+for s in float32 float64; do
+    for p in 2 3 4 5 6 7 8 9; do
+        cd build
+        cmake .. -Dscalar_type=$s -Dpolynomial_degree=$p -Dnvidia=On -Damd=off
+        make mat_free_mass3D
+        cd ..
+	mpirun -n 1 build/mat_free_mass3D --nreps 500 --nelements $nelements 2>&1 | tee experiments/$EXPERIMENT/log_${s}_$p.txt
+    done
 done
-
-# p=7   
-# python run.py mat_free_mass --nvidia -p $p --rebuild
-# for nelements in 256; do
-#     python run.py mat_free_mass --nvidia -p $p --run-args --nreps 200 --nelements $nelements 2>&1 | tee experiments/$EXPERIMENT/log_$p.txt
-# done

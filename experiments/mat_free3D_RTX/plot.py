@@ -19,8 +19,8 @@ def parse_log_file(filename):
                 sf = float(m3.group(1))
     return sf, sf_otf, baseline
 
-P = list(range(3, 10))
-sf, sf_otf, base = zip(*(parse_log_file(f'sf_log_{i}.txt') for i in P))
+P = list(range(2, 10))
+sf, sf_otf, base = zip(*(parse_log_file(f'log_float32_{i}.txt') for i in P))
 
 plt.plot(P, sf, marker='o', label='Sum Facto')
 plt.plot(P, sf_otf, marker='>', label='Sum Facto On the fly')
@@ -31,4 +31,4 @@ plt.title('Mat-free performance on RTX A 6000 \n 3D mass on tet mesh, shared mem
 plt.grid(True)
 plt.legend()
 plt.tight_layout()
-plt.savefig('rtx_mat_free3Dsf.png')
+plt.savefig('rtx_mat_free_32B.png')

@@ -136,10 +136,15 @@ namespace dolfinx::acc
 
       dim3 grid_size(this->number_of_local_cells);
       dim3 block_size(nd);
-      mass_diagonal_inv<T, nd, nq><<<grid_size, block_size>>>(
+      mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(
           out_dofs, this->alpha_d_span.data(),
           this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
           this->phi_d_span.data());
+
+      thrust::transform(thrust::device, diag_inv.array().begin(),
+                        diag_inv.array().begin() + diag_inv.map()->size_local(), diag_inv.mutable_array().begin(),
+                        [] __host__ __device__(T yi)
+                        { return 1.0 / yi; });
       check_device_last_error();
     }
 
@@ -297,14 +302,19 @@ namespace dolfinx::acc
     template <typename Vector>
     void get_diag_inverse(Vector &diag_inv)
     {
+      diag_inv.set(0.);
       T *out_dofs = diag_inv.mutable_array().data();
 
       dim3 grid_size(this->number_of_local_cells);
       dim3 block_size(nd);
-      mass_diagonal_inv<T, nd, nq><<<grid_size, block_size>>>(
+      mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(
           out_dofs, this->alpha_d_span.data(),
           this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
           this->phi_d_span.data());
+      thrust::transform(thrust::device, diag_inv.array().begin(),
+                        diag_inv.array().begin() + diag_inv.map()->size_local(), diag_inv.mutable_array().begin(),
+                        [] __host__ __device__(T yi)
+                        { return 1.0 / yi; });
       check_device_last_error();
     }
 

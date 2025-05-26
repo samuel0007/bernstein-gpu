@@ -70,8 +70,8 @@ if (DEFINED ENV{CRAYPE_VERSION})
   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -Ofast -march=native -I/opt/cray/pe/mpich/8.1.27/ofi/gnu/9.1/include")
 endif()
 
-# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
 if(NOT TARGET dolfinx)
   find_package(DOLFINX REQUIRED)
@@ -142,11 +142,13 @@ endfunction()
 add_example(mat_free_mass)
 add_example(mat_free_mass3D)
 add_example(mass_cg)
+add_example(mass3D_cg)
 add_example(planar_wave)
 add_example(planar_wave_triangles)
 add_example(planar_wave_triangles_gpu)
 add_example(planar_wave_tets_gpu)
 add_example(planar_wave_triangles_gpu_test)
+add_example(spherical_transducer_gpu)
 
 
 

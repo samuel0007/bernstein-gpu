@@ -2,7 +2,6 @@ from basix.ufl import element
 from basix import LagrangeVariant
 from ufl import (
     Coefficient,
-    Constant,
     FunctionSpace,
     Mesh,
     TestFunction,

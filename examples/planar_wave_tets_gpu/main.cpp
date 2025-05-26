@@ -82,7 +82,7 @@ int main(int argc, char *argv[])
     // Finite element
     basix::FiniteElement element = basix::create_element<T>(
         basix::element::family::P, basix::cell::type::tetrahedron, degreeOfBasis,
-        basix::element::lagrange_variant::bernstein,
+        basix::element::lagrange_variant::gll_warped,
         basix::element::dpc_variant::unset, false);
 
     // Define DG function space for the physical parameters of the domain
