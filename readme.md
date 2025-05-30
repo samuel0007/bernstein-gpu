@@ -1,6 +1,6 @@
 # Berstein Accelerated GPU Acoustic Solver
 
-P-multigrid on GPUs using dolfinx
+(Non)-Linear (lossy) wave equation solver on GPU based on dolfinx.
 
 ## CSD3 [A100]
 
