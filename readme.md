@@ -2,6 +2,10 @@
 
 (Non)-Linear (lossy) wave equation solver on GPU based on dolfinx.
 
+Spherical Transducer, Linear Wave Equation
+![SphericalTransducer](example.gif)
+
+
 ## CSD3 [A100]
 
 Obtain a GPU A100 node to build the spack environment using `salloc`
