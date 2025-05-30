@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "spherical_transducer_gpu.h"
+#include "quad_gpu.h"
 
 #include <fstream>
 #include <memory>
@@ -17,9 +17,7 @@
 #include <dolfinx/la/Vector.h>
 
 #include "src/cg_gpu.hpp"
-#include "src/laplaciantet.hpp"
 #include "src/mass_baseline.hpp"
-#include "src/mesh.hpp"
 #include "src/vector.hpp"
 
 using namespace dolfinx;
@@ -59,10 +57,9 @@ public:
                  std::shared_ptr<mesh::MeshTags<std::int32_t>> FacetTags,
                  std::shared_ptr<fem::Function<T>> speedOfSound,
                  std::shared_ptr<fem::Function<T>> density,
-                 std::shared_ptr<fem::Function<T>> alpha,
                  const T &sourceFrequency, const T &sourceAmplitude,
                  const T &sourceSpeed)
-      : mesh(mesh), gpu_action(mesh, V, alpha->x()->array()) {
+      : mesh(mesh) {
     // MPI
     MPI_Comm_rank(MPI_COMM_WORLD, &mpi_rank);
     MPI_Comm_size(MPI_COMM_WORLD, &mpi_size);
@@ -126,9 +123,18 @@ public:
       }
     }
 
+    a = std::make_shared<fem::Form<T>>(fem::create_form<T>(
+        *form_quad_gpu_a, {V}, {{"u", u}, {"c0", c0}, {"rho0", rho0}}, {},
+        {}, {}));
+
+    m = std::make_shared<la::Vector<T>>(index_map, bs);
+    m_ = m->mutable_array();
+    std::fill(m_.begin(), m_.end(), 0.0);
+    fem::assemble_vector(m_, *a);
+
     // Define RHS form
     L = std::make_shared<fem::Form<T>>(fem::create_form<T>(
-        *form_spherical_transducer_gpu_L, {V},
+        *form_quad_gpu_L, {V},
         {{"g", g}, {"u_n", u_n}, {"v_n", v_n}, {"c0", c0}, {"rho0", rho0}}, {},
         fd_view, {}, {}));
 
@@ -137,86 +143,8 @@ public:
     b_d = std::make_shared<DeviceVector>(index_map, bs);
     u_n_d = std::make_shared<DeviceVector>(index_map, bs);
     v_n_d = std::make_shared<DeviceVector>(index_map, bs);
-  
-    double rtol = 1e-8; // TODO param
-    cg_p =
-        std::make_unique<dolfinx::acc::CGSolver<DeviceVector>>(index_map, bs);
-    cg_p->set_max_iterations(1000);
-    cg_p->set_tolerance(rtol);
-
-
-    
-    // auto dofmap = V->dofmap();
-    // const int tdim = mesh->topology()->dim();
-
-    // auto [Gpoints, Gweights] = basix::quadrature::make_quadrature<T>(
-    //     basix::quadrature::type::Default, basix::cell::type::tetrahedron,
-    //     basix::polyset::type::standard, 2 * Q - 2);
-
-    // const fem::CoordinateElement<T> &cmap = mesh->geometry().cmap();
-    // auto xdofmap = mesh->geometry().dofmap();
-    // thrust::device_vector<std::int32_t> dofmap_d(dofmap->map().data_handle(),
-    //                                              dofmap->map().data_handle() +
-    //                                                  dofmap->map().size());
-    // std::span<const std::int32_t> dofmap_d_span(
-    //     thrust::raw_pointer_cast(dofmap_d.data()), dofmap_d.size());
-    // spdlog::info("Send dofmap to GPU (size = {} bytes)",
-    //              dofmap_d.size() * sizeof(std::int32_t));
-
-    // // Geometry dofmap
-    // spdlog::info("Copy geometry dofmap to device ({} bytes)",
-    //              xdofmap.size() * sizeof(std::int32_t));
-    // thrust::device_vector<std::int32_t> xdofmap_d(
-    //     xdofmap.data_handle(), xdofmap.data_handle() + xdofmap.size());
-    // std::span<const std::int32_t> xdofmap_d_span(
-    //     thrust::raw_pointer_cast(xdofmap_d.data()), xdofmap_d.size());
-    // // Geometry points
-    // spdlog::info("Copy geometry to device ({} bytes)",
-    //              mesh->geometry().x().size() * sizeof(T));
-    // thrust::device_vector<T> xgeom_d(mesh->geometry().x().begin(),
-    //                                  mesh->geometry().x().end());
-    // std::span<const T> xgeom_d_span(thrust::raw_pointer_cast(xgeom_d.data()),
-    //                                 xgeom_d.size());
-
-    // // dphi tables at quadrature points
-    // std::array<std::size_t, 4> phi_shape =
-    //     cmap.tabulate_shape(1, Gweights.size());
-    // std::vector<T> phi_b(
-    //     std::reduce(phi_shape.begin(), phi_shape.end(), 1, std::multiplies{}));
-    // cmap.tabulate(1, Gpoints, {Gweights.size(), 3}, phi_b);
-
-    // // Copy dphi to device (skipping phi in table)
-    // spdlog::info("Copy dphi to device ({} bytes)",
-    //              (3 * phi_b.size() * sizeof(T)) / 4);
-
-    // thrust::device_vector<T> dphi_d(phi_b.begin() + phi_b.size() / 4,
-    //                                 phi_b.end());
-    // std::span<const T> dphi_d_span(thrust::raw_pointer_cast(dphi_d.data()),
-    //                                dphi_d.size());
-
-    // // Copy quadrature weights to device
-    // spdlog::info("Copy Gweights to device ({} bytes)",
-    //              Gweights.size() * sizeof(T));
-    // thrust::device_vector<T> Gweights_d(Gweights.begin(), Gweights.end());
-    // std::span<const T> Gweights_d_span(
-    //     thrust::raw_pointer_cast(Gweights_d.data()), Gweights_d.size());
-
-    // auto kappa = std::make_shared<fem::Constant<T>>(2.0);
-
-    // const int num_cells_all = mesh->topology()->index_map(tdim)->size_local() +
-    //                           mesh->topology()->index_map(tdim)->num_ghosts();
-    // thrust::device_vector<T> constants_d(num_cells_all, kappa->value[0]);
-    // std::span<const T> constants_d_span(
-    //     thrust::raw_pointer_cast(constants_d.data()), constants_d.size());
-    // auto [lcells, bcells] = compute_boundary_cells(V);
-
-    // // Create matrix free operator
-    // spdlog::info("Create MatFreeLaplacian");
-    // dolfinx::common::Timer op_create_timer("% Create matfree operator");
-    // acc::MatFreeLaplacianTet<T> op(
-    //     Q, constants_d_span, dofmap_d_span, xgeom_d_span, xdofmap_d_span,
-    //     dphi_d_span, Gweights_d_span, std::span(Gpoints.data(), Gpoints.size()),
-    //     lcells, bcells, 0);
+    m_d = std::make_shared<DeviceVector>(index_map, bs);
+    m_d->copy_from_host(*m);
   }
   /// Set the initial values of u and v, i.e. u_0 and v_0
   void init() {
@@ -255,7 +183,25 @@ public:
     b->scatter_rev(std::plus<T>());
     b_d->copy_from_host(*b);
 
-    return cg_p->solve(gpu_action, result_d, *b_d, true);
+    {
+      // out = result->mutable_array();
+      // _b = b->array();
+      // _m = m->array();
+
+      // // Element wise division
+      // // out[i] = b[i]/m[i]
+      // std::transform(_b.begin(), _b.end(), _m.begin(), out.begin(),
+      //                [](const T &bi, const T &mi) { return bi / mi; });
+
+      thrust::transform(thrust::device, b_d->mutable_array().begin(),
+                        b_d->mutable_array().begin() + b_d->map()->size_local(),
+                        m_d->mutable_array().begin(), result_d.mutable_array().begin(),
+                        [] __host__ __device__( T bi, T mi) { return  bi / mi; });
+    }
+
+    return 0;
+
+    // return cg_p->solve(gpu_action, result_d, *b_d, true);
   }
 
   /// Runge-Kutta 4th order solver
@@ -319,7 +265,7 @@ public:
 
         f0(tn, un_d, vn_d, ku_d);
         int cg_its = f1(tn, un_d, vn_d, kv_d);
-        std::cout << "stage=" << i << " its=" << cg_its << std::endl;
+        // std::cout << "stage=" << i << " its=" << cg_its << std::endl;
 
         acc::axpy(u__d, dt * b_runge[i], ku_d, u__d);
         acc::axpy(v__d, dt * b_runge[i], kv_d, v__d);
@@ -376,9 +322,9 @@ private:
   std::shared_ptr<fem::FunctionSpace<T>> V;
   std::shared_ptr<fem::Function<T>> u, u_n, v_n, g, c0, rho0;
   std::shared_ptr<fem::Form<T>> a, L;
-  std::shared_ptr<la::Vector<T>> b;
+  std::shared_ptr<la::Vector<T>> m, b;
 
-  std::shared_ptr<DeviceVector> b_d, u_n_d, v_n_d;
+  std::shared_ptr<DeviceVector> b_d, u_n_d, v_n_d, m_d;
 
   std::function<void(const la::Vector<T> &, la::Vector<T> &)> action;
   std::map<std::pair<dolfinx::fem::IntegralType, int>,
@@ -389,8 +335,8 @@ private:
   std::span<T> g_, m_, b_, out;
   std::span<const T> _m, _b;
 
-  acc::MatFreeMassBaseline3D<T, P, Q> gpu_action;
-  std::unique_ptr<dolfinx::acc::CGSolver<DeviceVector>> cg_p;
+  // acc::MatFreeMassBaseline3D<T, P, Q> gpu_action;
+  // std::unique_ptr<dolfinx::acc::CGSolver<DeviceVector>> cg_p;
 };
 
 // Note:

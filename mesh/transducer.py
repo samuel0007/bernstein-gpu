@@ -4,17 +4,27 @@ import gmsh
 
 filename = "data/transducer.msh"
 # TYPE = "spherical"
-TYPE = "planar"
+# TYPE = "planar"
+TYPE = "simple"
+
 D = 3
-R = 0.064 if TYPE == "spherical" else 0.01 # [m]
+# R = 0.064 if TYPE == "spherical" else 0.01 # [m]
+R = 0.064 if TYPE == "spherical" else 0.035 # [m]
+# R = 0.016 if TYPE == "spherical" else 0.005 # [m]
 
 A = 0.064 # [m]
-H = 0.120 # [m]
-W = 0.070 # [m]
+# A = 0.016 # [m]
+H = 0.02
+# H = 0.120 # [m]
+# H = 0.015 # [m]
+# W = 0.070 # [m]
+W = 0.01
+# W = 0.012 # [m]
+
 frequency = 0.5e6 # [Hz]
 speedOfSound = 1500 # [m/s]
 wavelength = speedOfSound / frequency # [m]
-elementsPerWavelength = 2.5 # [elements]
+elementsPerWavelength = 4 # [elements]
 inflow_marker = 1
 outflow_marker = 2
 volume_marker = 1
@@ -44,6 +54,70 @@ def add_spherical_transducer_2d(model, radius_of_curvature, aperture_diameter, b
     surface = model.add_plane_surface(boundary)
     return arc, outflow_b, [surface]
 
+def add_simple_transducer_2d(model, box_length, box_width, h):
+    # points for the rectangular transducer
+    p_tl = model.add_point([-box_width/2.0, 0.0, 0.0], mesh_size=h)
+    p_tr = model.add_point([ box_width/2.0, 0.0, 0.0], mesh_size=h)
+    p_bl = model.add_point([-box_width/2.0, -box_length, 0.0], mesh_size=h)
+    p_br = model.add_point([ box_width/2.0, -box_length, 0.0], mesh_size=h)
+
+    # lines for the rectangular transducer
+    l_r = model.add_line(p_tr, p_br)
+    l_b = model.add_line(p_br, p_bl)
+    l_l = model.add_line(p_bl, p_tl)
+    l_t = model.add_line(p_tl, p_tr)
+    
+    outflow = [l_b]
+    inflow = l_t
+    
+    boundary = model.add_curve_loop([l_t, l_r, l_b, l_l])
+    surface  = model.add_plane_surface(boundary)
+    
+    return inflow, outflow, [surface]
+
+def add_simple_transducer_3d(model, box_length, box_width, h):
+    # corners
+    x0, x1 = -box_width/2.0, box_width/2.0
+    y0, y1 =    0.0       , -box_length
+    z0, z1 =    0.0       ,  box_width
+    p = lambda x,y,z: model.add_point([x,y,z], mesh_size=h)
+    p000 = p(x0,y0,z0); p100 = p(x1,y0,z0)
+    p110 = p(x1,y1,z0); p010 = p(x0,y1,z0)
+    p001 = p(x0,y0,z1); p101 = p(x1,y0,z1)
+    p111 = p(x1,y1,z1); p011 = p(x0,y1,z1)
+
+    # edges
+    L = lambda a,b: model.add_line(a,b)
+    l1 = L(p000,p100);  l2 = L(p100,p110)
+    l3 = L(p110,p010);  l4 = L(p010,p000)
+    l5 = L(p001,p101);  l6 = L(p101,p111)
+    l7 = L(p111,p011);  l8 = L(p011,p001)
+    l9 = L(p000,p001); l10 = L(p100,p101)
+    l11= L(p110,p111); l12 = L(p010,p011)
+
+    # faces (curve loops + plane surfaces)
+    front_loop  = model.add_curve_loop([l1,  l10, -l5,  -l9])
+    back_loop   = model.add_curve_loop([l3,  l12, -l7,  -l11])
+    left_loop   = model.add_curve_loop([l4,   l9, -l8,  -l12])
+    right_loop  = model.add_curve_loop([l2,  l11, -l6,  -l10])
+    bottom_loop = model.add_curve_loop([l1,   l2,  l3,   l4])
+    top_loop    = model.add_curve_loop([l5,   l6,  l7,   l8])
+
+    front  = model.add_plane_surface(front_loop)
+    back   = model.add_plane_surface(back_loop)
+    left   = model.add_plane_surface(left_loop)
+    right  = model.add_plane_surface(right_loop)
+    bottom = model.add_plane_surface(bottom_loop)
+    top    = model.add_plane_surface(top_loop)
+
+    # volume
+    sl = model.add_surface_loop([front, right, back, left, bottom, top])
+    vol = model.add_volume(sl)
+
+    inflow, outflow = front, [back]
+    return inflow, outflow, [vol]
+    
+    
 def add_planar_transducer_2d(model, radius, box_length, box_width, h):
     a = radius
     w = box_width / 2.0
@@ -160,7 +234,6 @@ def add_planar_transducer_3d(model, radius, box_length, box_width, h):
     annulus_surf = model.add_plane_surface(outer_loop, [inlet_loop])
 
 
-
     # --- extrude annulus ⇒ hollow cylinder volume + its lateral walls + top ring ---
     top_annulus, vol_annulus, lateral_annulus = model.extrude(
         annulus_surf,
@@ -174,7 +247,8 @@ def add_planar_transducer_3d(model, radius, box_length, box_width, h):
     )
 
     # collect surfaces:
-    outflow_surfs = [top_annulus, annulus_surf, top_inlet] + lateral_annulus[:4]
+    # outflow_surfs = [top_annulus, annulus_surf, top_inlet] + lateral_annulus[:4]
+    outflow_surfs = [top_annulus, top_inlet] + lateral_annulus[:4]
     inlet_surfs   = inlet_surf
 
     # return lists of tags (you can assign physical groups thereafter)
@@ -202,6 +276,11 @@ with pygmsh.occ.Geometry() as geom:
             inflow_b, outflow_b, surface = add_planar_transducer_2d(geom, R, H, W, h)
         else:
             inflow_b, outflow_b, surface = add_planar_transducer_3d(geom, R, H, W, h)
+    elif TYPE == "simple":
+        if D == 2:
+            inflow_b, outflow_b, surface = add_simple_transducer_2d(geom, H, W, h)
+        else:
+            inflow_b, outflow_b, surface = add_simple_transducer_3d(geom, H, W, h)
     else:
         raise ValueError("Invalid transducer type. Choose 'spherical' or 'planar'.")
     geom.synchronize()
@@ -211,6 +290,6 @@ with pygmsh.occ.Geometry() as geom:
     # gmsh.model.setPhysicalName(1, outflow_marker, "Outflow")
     gmsh.model.addPhysicalGroup(D, [surface[i].dim_tags[0][1] for i in range(len(surface))], volume_marker)
     # gmsh.model.setPhysicalName(2, volume_marker, "Volume")
-    gmsh.model.mesh.generate(3)
+    gmsh.model.mesh.generate(D)
     
     gmsh.write(filename)

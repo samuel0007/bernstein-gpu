@@ -32,7 +32,6 @@ namespace po = boost::program_options;
 
 po::variables_map get_cli_config(int argc, char *argv[]) {
 
-
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
@@ -43,6 +42,7 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
       ("speed-of-sound", po::value<T>()->default_value(1500), "Speed of sound (m/s)")
       ("density", po::value<T>()->default_value(1000), "Density (kg/m^3)")
+      ("domain-length", po::value<T>()->default_value(0.12), "Domain length (m)")
       ("output-steps", po::value<int>()->default_value(50), "Number of output steps");
   // clang-format on
 
@@ -67,13 +67,14 @@ int main(int argc, char *argv[]) {
   const std::string mesh_filepath = std::filesystem::path(DATA_DIR) /
                                     (vm["mesh"].as<std::string>() + ".xdmf");
   const std::string output_filepath = std::filesystem::path(DATA_DIR) /
-                                    (vm["output"].as<std::string>() + ".bp");
+                                      (vm["output"].as<std::string>() + ".bp");
   const T CFL = vm["CFL"].as<T>();
   const T sourceFrequency = vm["source-frequency"].as<T>();
   const T sourceAmplitude = vm["source-amplitude"].as<T>();
   const T speedOfSound = vm["speed-of-sound"].as<T>(); // (m/s)
   const T density = vm["density"].as<T>();             // (kg/m^3)
   const int outputSteps = vm["output-steps"].as<int>();
+  const T domainLength = vm["domain-length"].as<T>(); // (m)
 
   init_logging(argc, argv);
   PetscInitialize(&argc, &argv, nullptr, nullptr);
@@ -85,9 +86,6 @@ int main(int argc, char *argv[]) {
 
     // Source parameters
     const T period = 1 / sourceFrequency; // (s)
-
-    // Domain parameters
-    const T domainLength = 0.12; // (m)
 
     // FE parameters
     const int degreeOfBasis = 2;
@@ -173,6 +171,7 @@ int main(int argc, char *argv[]) {
     const T startTime = 0.0;
     const T finalTime = (domainLength / speedOfSound + 4.0 / sourceFrequency);
     const int numberOfStep = (finalTime - startTime) / timeStepSize + 1;
+    auto dofmap = V->dofmap();
 
     if (mpi_rank == 0) {
       std::cout << "Problem type: Spherical Transducer 3D" << "\n";
@@ -188,7 +187,11 @@ int main(int argc, char *argv[]) {
       std::cout << "Time step size: " << timeStepSize << "\n";
       std::cout << "Number of steps per period: " << stepPerPeriod << "\n";
       std::cout << "Total number of steps: " << numberOfStep << "\n";
-      std::cout << "Number of cells" << num_cell << "\n";
+      std::cout << "Number of cells " << num_cell << "\n";
+      std::cout << "Number of global dofs " << dofmap->index_map->size_global()
+                << "\n";
+      std::cout << "Number of local dofs " << dofmap->index_map->size_global()
+                << "\n";
     }
 
     // Model

@@ -3,7 +3,7 @@ from basix.ufl import element
 from ufl import (Coefficient, FunctionSpace, Mesh, TrialFunction, TestFunction,
                  ds, dx, grad, inner, action)
 
-P = 2  # Degree of polynomial basis
+P = 2 # Degree of polynomial basis
 
 # Define mesh and finite element
 coord_element = element("Lagrange", "tetrahedron", 1, shape=(3, ))

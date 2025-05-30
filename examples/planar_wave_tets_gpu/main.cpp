@@ -25,8 +25,7 @@ using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
 static_assert(false)
 #endif
 
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   dolfinx::init_logging(argc, argv);
   PetscInitialize(&argc, &argv, nullptr, nullptr);
 
@@ -38,7 +37,7 @@ int main(int argc, char *argv[])
 
     // Source parameters
     const T sourceFrequency = 0.1e6;      // (Hz)
-    const T sourceAmplitude = 6000;      // (Pa)
+    const T sourceAmplitude = 6000;       // (Pa)
     const T period = 1 / sourceFrequency; // (s)
 
     // Material parameters
@@ -52,11 +51,12 @@ int main(int argc, char *argv[])
     const int degreeOfBasis = 2;
 
     // Read mesh and mesh tags
-    auto coord_element = fem::CoordinateElement<T>(mesh::CellType::tetrahedron, 1);
+    auto coord_element =
+        fem::CoordinateElement<T>(mesh::CellType::tetrahedron, 1);
     io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf",
                        "r");
-    auto mesh = std::make_shared<mesh::Mesh<T>>(fmesh.read_mesh(
-        coord_element, mesh::GhostMode::none, "planar_3d_0_t"));
+    auto mesh = std::make_shared<mesh::Mesh<T>>(
+        fmesh.read_mesh(coord_element, mesh::GhostMode::none, "planar_3d_0_t"));
     mesh->topology()->create_connectivity(2, 3);
     auto mt_cell = std::make_shared<mesh::MeshTags<std::int32_t>>(
         fmesh.read_meshtags(*mesh, "planar_3d_0_t_cells", std::nullopt));
@@ -81,8 +81,8 @@ int main(int argc, char *argv[])
 
     // Finite element
     basix::FiniteElement element = basix::create_element<T>(
-        basix::element::family::P, basix::cell::type::tetrahedron, degreeOfBasis,
-        basix::element::lagrange_variant::gll_warped,
+        basix::element::family::P, basix::cell::type::tetrahedron,
+        degreeOfBasis, basix::element::lagrange_variant::gll_warped,
         basix::element::dpc_variant::unset, false);
 
     // Define DG function space for the physical parameters of the domain
@@ -106,23 +106,22 @@ int main(int argc, char *argv[])
 
     std::span<T> c0_ = c0->x()->mutable_array();
     std::for_each(cells_1.begin(), cells_1.end(),
-                  [&](std::int32_t &i)
-                  { c0_[i] = speedOfSound; });
+                  [&](std::int32_t &i) { c0_[i] = speedOfSound; });
     c0->x()->scatter_fwd();
 
     std::span<T> rho0_ = rho0->x()->mutable_array();
     std::for_each(cells_1.begin(), cells_1.end(),
-                  [&](std::int32_t &i)
-                  { rho0_[i] = density; });
+                  [&](std::int32_t &i) { rho0_[i] = density; });
     rho0->x()->scatter_fwd();
 
     std::span<T> alpha_ = alpha->x()->mutable_array();
-    std::for_each(cells_1.begin(), cells_1.end(), [&](std::int32_t &i)
-                  { alpha_[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]); });
+    std::for_each(cells_1.begin(), cells_1.end(), [&](std::int32_t &i) {
+      alpha_[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]);
+    });
     alpha->x()->scatter_fwd();
     std::cout << "cells_1 size:" << cells_1.size() << std::endl;
-    std::cout << "alpha size:" << alpha->x()->mutable_array().size() << std::endl; 
-
+    std::cout << "alpha size:" << alpha->x()->mutable_array().size()
+              << std::endl;
 
     // Temporal parameters
     const T CFL = 0.1;
@@ -131,13 +130,13 @@ int main(int argc, char *argv[])
     const int stepPerPeriod = period / timeStepSize + 1;
     timeStepSize = period / stepPerPeriod;
     const T startTime = 0.0;
-    const T finalTime =
-        (domainLength / speedOfSound + 4.0 / sourceFrequency);
+    const T finalTime = (domainLength / speedOfSound + 4.0 / sourceFrequency);
     const int numberOfStep = (finalTime - startTime) / timeStepSize + 1;
     const int output_steps = 10;
 
-    if (mpi_rank == 0)
-    {
+    auto dofmap = V->dofmap();
+
+    if (mpi_rank == 0) {
       std::cout << "Problem type: Planewave 3D" << "\n";
       std::cout << "Speed of sound: " << speedOfSound << "\n";
       std::cout << "Density: " << density << "\n";
@@ -151,6 +150,8 @@ int main(int argc, char *argv[])
       std::cout << "Time step size: " << timeStepSize << "\n";
       std::cout << "Number of steps per period: " << stepPerPeriod << "\n";
       std::cout << "Total number of steps: " << numberOfStep << "\n";
+      std::cout << "Number of global dofs " << dofmap->index_map->size_global()
+                << "\n";
     }
 
     // Model
@@ -160,22 +161,24 @@ int main(int argc, char *argv[])
 
     // Output space
     basix::FiniteElement lagrange_element = basix::create_element<T>(
-        basix::element::family::P, basix::cell::type::tetrahedron, degreeOfBasis,
-        basix::element::lagrange_variant::gll_warped,
+        basix::element::family::P, basix::cell::type::tetrahedron,
+        degreeOfBasis, basix::element::lagrange_variant::gll_warped,
         basix::element::dpc_variant::unset, false);
 
-    auto V_out = std::make_shared<fem::FunctionSpace<T>>(
-        fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(lagrange_element)));
+    auto V_out =
+        std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
+            mesh,
+            std::make_shared<const fem::FiniteElement<T>>(lagrange_element)));
 
     auto u_out = std::make_shared<fem::Function<T>>(V_out);
 
     // Output to VTX
     dolfinx::io::VTXWriter<T> f_out(mesh->comm(), "output_final.bp", {u_out},
-                                      "bp5");
+                                    "bp5");
 
     model.init();
 
     // tsolve.start();
-    model.rk4(startTime, finalTime, timeStepSize, 1000, u_out, f_out);
+    model.rk4(startTime, finalTime, timeStepSize, output_steps, u_out, f_out);
   }
 }

@@ -4,14 +4,17 @@ gmsh.initialize()
 gmsh.model.add("spherical_transducer")
 
 # Parameters
-Rcurv = 0.064         # radius of curvature
-A     = 0.064         # aperture diameter
-Lbox  = 0.120         # backing‐box length
+# Rcurv = 0.064         # radius of curvature
+# A     = 0.064         # aperture diameter
+# Lbox  = 0.120         # backing‐box length
+Rcurv = 0.016         # radius of curvature
+A     = 0.016         # aperture diameter
+Lbox  = 0.03         # backing‐box length
 
 frequency = 0.5e6 # [Hz]
 speedOfSound = 1500 # [m/s]
 wavelength = speedOfSound / frequency # [m]
-elementsPerWavelength = 2.5 # [elements]
+elementsPerWavelength = 2.4 # [elements]
 inflow_marker = 1
 outflow_marker = 2
 volume_marker = 1

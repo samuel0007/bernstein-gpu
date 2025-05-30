@@ -277,6 +277,9 @@ public:
     // kernels::copy<T>(*v_, *v_n->x());
     u_n->x()->scatter_fwd();
     v_n->x()->scatter_fwd();
+    
+    u_out->interpolate(*u_n);
+    f_out.write(t);
   }
 
   std::shared_ptr<fem::Function<T>> u_sol() const { return u_n; }

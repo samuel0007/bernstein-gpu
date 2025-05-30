@@ -2,6 +2,8 @@
 *.h5
 *.xdmf
 *.bp
+*.png
+*.pyc
 
 
 *.ncu-rep

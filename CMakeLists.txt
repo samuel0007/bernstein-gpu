@@ -149,6 +149,9 @@ add_example(planar_wave_triangles_gpu)
 add_example(planar_wave_tets_gpu)
 add_example(planar_wave_triangles_gpu_test)
 add_example(spherical_transducer_gpu)
+add_example(quad_gpu)
+add_example(hex_gpu)
+
 
 
 
