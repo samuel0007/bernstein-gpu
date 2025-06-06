@@ -46,7 +46,8 @@ std::vector<T> compute_geometry(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
         // Get cell geometry (coordinates dofs)
         for (std::size_t i = 0; i < x_dofmap.extent(1); ++i)
         {
-            for (std::size_t j = 0; j < gdim; ++j) {
+            for (std::size_t j = 0; j < gdim; ++j)
+            {
                 coord_dofs(i, j) = x_g[3 * x_dofmap(c, i) + j];
             }
         }
@@ -103,7 +104,7 @@ std::vector<T> compute_geometry(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
     std::mdspan<T, std::dextents<std::size_t, 2>> coord_dofs(coord_dofs_b.data(), num_dofs_g, gdim);
 
     std::vector<T> J_b(tdim * gdim);
-    std::mdspan<T, std::dextents<std::size_t, 2>> J(J_b.data(), tdim, gdim);
+    std::mdspan<T, std::dextents<std::size_t, 2>> J(J_b.data(), gdim, tdim);
     std::vector<T> detJ_b(nc * nq);
     std::mdspan<T, std::dextents<std::size_t, 2>> detJ(detJ_b.data(), nc, nq);
     std::vector<T> det_scratch(2 * tdim * gdim);
@@ -113,7 +114,8 @@ std::vector<T> compute_geometry(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
         // Get cell geometry (coordinates dofs)
         for (std::size_t i = 0; i < x_dofmap.extent(1); ++i)
         {
-            for (std::size_t j = 0; j < gdim; ++j) {
+            for (std::size_t j = 0; j < gdim; ++j)
+            {
                 coord_dofs(i, j) = x_g[3 * x_dofmap(c, i) + j];
             }
         }
@@ -134,6 +136,90 @@ std::vector<T> compute_geometry(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
             detJ(c, q) = cmap.compute_jacobian_determinant(_J, det_scratch);
 
             detJ(c, q) = std::fabs(detJ(c, q)) * weights[q];
+        }
+    }
+
+    return detJ_b;
+}
+
+/// Compute the determinant of the Jacobian ([cell][point]): nc x nq
+/// TODO: this assumes affine transformation.
+/// @param[in] mesh The mesh object (which contains the coordinate map)
+/// @param[in] cell_facet_data (cell, local_facet) x NF
+/// @param[in] points The quadrature points to compute Jacobian of the map
+template <typename T>
+std::vector<T> compute_geometry_facets(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
+                                       std::vector<int32_t> cell_facet_data,
+                                       std::vector<T> points, std::vector<T> weights)
+{
+    // Number of quadrature points
+    std::size_t nq = weights.size();
+
+    // Number of facets
+    std::size_t nf = cell_facet_data.size() / 2;
+
+    // Get geometry data
+    const fem::CoordinateElement<T> &cmap = mesh->geometry().cmap();
+    auto x_dofmap = mesh->geometry().dofmap();
+    const std::size_t num_dofs_g = cmap.dim();
+    std::span<const T> x_g = mesh->geometry().x();
+
+    // Get dimensions
+    const std::size_t tdim = mesh->topology()->dim();
+    const std::size_t gdim = mesh->geometry().dim();
+
+    // Tabulate basis functions at quadrature points
+    std::array<std::size_t, 4> phi_shape = cmap.tabulate_shape(1, nq);
+    std::vector<T> phi_b(std::reduce(phi_shape.begin(), phi_shape.end(), 1, std::multiplies{}));
+    std::mdspan<const T, std::dextents<std::size_t, 4>> phi(phi_b.data(), phi_shape);
+    cmap.tabulate(1, points, {nq, gdim}, phi_b);
+
+    // Create working arrays
+    std::vector<T> coord_dofs_b(num_dofs_g * gdim);
+    std::mdspan<T, std::dextents<std::size_t, 2>> coord_dofs(coord_dofs_b.data(), num_dofs_g, gdim);
+   
+    fem::ElementDofLayout element_dof_layout = cmap.create_dof_layout();
+ 
+
+    std::vector<T> J_b((tdim - 1)  * gdim);
+    std::mdspan<T, std::dextents<std::size_t, 2>> J(J_b.data(), gdim, tdim - 1);
+    std::vector<T> detJ_b(nf * nq);
+    std::mdspan<T, std::dextents<std::size_t, 2>> detJ(detJ_b.data(), nf, nq);
+    std::vector<T> det_scratch(2 * tdim * gdim);
+
+    for (std::size_t f = 0; f < nf; ++f)
+    {
+        int32_t local_cell = cell_facet_data[2 * f];
+        int32_t local_facet = cell_facet_data[2 * f + 1];
+
+        // dofs of interest for selected face
+        std::vector<int> facet_dofs = element_dof_layout.entity_closure_dofs(tdim - 1, local_facet);
+
+        // Get cell geometry (coordinates dofs)
+        for (std::size_t i = 0; i < facet_dofs.size(); ++i)
+        {
+            for (std::size_t j = 0; j < gdim; ++j)
+            {
+                coord_dofs(i, j) = x_g[3 * x_dofmap(local_cell, facet_dofs[i]) + j];
+            }
+        }
+
+        // Compute the scaled Jacobian determinant
+        for (std::size_t q = 0; q < nq; ++q)
+        {
+            std::fill(J_b.begin(), J_b.end(), 0.0);
+
+            // Get the derivatives at each quadrature points
+            auto dphi = std::submdspan(phi, std::pair(1, tdim), q, std::full_extent, 0);
+
+            // Compute Jacobian matrix
+            auto _J = std::submdspan(J, std::full_extent, std::full_extent);
+            cmap.compute_jacobian(dphi, coord_dofs, _J);
+
+            // Compute the determinant of the Jacobian
+            detJ(f, q) = cmap.compute_jacobian_determinant(_J, det_scratch);
+
+            detJ(f, q) = std::fabs(detJ(f, q)) * weights[q];
         }
     }
 
