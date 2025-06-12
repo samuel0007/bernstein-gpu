@@ -4,7 +4,7 @@ option(cpu "Build for CPUs"	off)
 option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
-set(polynomial_degree 1 CACHE STRING "Polynomial degree")
+set(polynomial_degree 5 CACHE STRING "Polynomial degree")
 set(scalar_type "float64" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 message(STATUS "Scalar type: ${scalar_type}")
@@ -71,7 +71,7 @@ if (DEFINED ENV{CRAYPE_VERSION})
 endif()
 
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -lineinfo -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
 if(NOT TARGET dolfinx)
   find_package(DOLFINX REQUIRED)
@@ -151,7 +151,8 @@ add_example(planar_wave_triangles_gpu_test)
 add_example(spherical_transducer_gpu)
 add_example(quad_gpu)
 add_example(hex_gpu)
-add_example(boundary_check)
+add_example(mat_free_exterior_mass)
+add_example(mat_free_exterior_mass3D)
 
 
 

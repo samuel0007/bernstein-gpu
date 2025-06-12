@@ -2,9 +2,26 @@
 
 #include <cstdio>
 #include <sstream>
+#include <thrust/device_vector.h>
+
+template<typename InputIt, typename T>
+auto copy_to_device(InputIt first,
+                    InputIt last,
+                    thrust::device_vector<T> &dev,
+                    char const* name)
+{
+    auto n = std::distance(first, last);
+    dev.resize(n);
+    thrust::copy(first, last, dev.begin());
+    auto ptr = thrust::raw_pointer_cast(dev.data());
+    std::cout << std::format("Sent {} to GPU ({} bytes)\n", name, n*sizeof(T));
+    return std::span<const T>(ptr, n);
+}
+
 
 // Some useful utilities for error checking and synchronisation
 // for each hardware type
+
 
 #ifdef USE_HIP
 #include <hip/hip_runtime.h>

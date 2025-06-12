@@ -1,6 +1,5 @@
-// # Mass matrix operation
-
-#include "boundary_check.h"
+// # Exterior Mass matrix operation
+#include "mat_free_exterior_mass.h"
 #include <algorithm>
 #include <basix/finite-element.h>
 #include <cmath>
@@ -45,7 +44,7 @@ po::variables_map get_cli_config(int argc, char *argv[])
     po::options_description desc("Allowed options");
     // clang-format off
   desc.add_options()("help,h", "print usage message")
-      ("nelements", po::value<int>()->default_value(2), "Number of elements (1D)")
+      ("nelements", po::value<int>()->default_value(3), "Number of elements (1D)")
       ("nreps", po::value<int>()->default_value(1), "number of repetitions")
       ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator");
     // clang-format on
@@ -93,7 +92,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
     auto V_DG = std::make_shared<fem::FunctionSpace<T>>(
         fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
 
-    auto alpha = std::make_shared<fem::Function<T>>(V);
+    auto alpha = std::make_shared<fem::Function<T>>(V_DG);
     alpha->x()->set(1.);
 
     std::shared_ptr<mesh::Topology> topology = mesh->topology();
@@ -105,6 +104,8 @@ void solver(MPI_Comm comm, po::variables_map vm)
     topology->create_connectivity(1, 2);
     const std::vector bfacets = mesh::exterior_facet_indices(*topology);
     std::size_t nbfacets = bfacets.size();
+
+    auto g = std::make_shared<fem::Function<T>>(V);
 
     std::vector<std::pair<std::int32_t, std::vector<std::int32_t>>> facet_domains;
     std::map<
@@ -163,27 +164,33 @@ void solver(MPI_Comm comm, po::variables_map vm)
 
     auto map = V->dofmap()->index_map;
     int map_bs = V->dofmap()->index_map_bs();
+    la::Vector<T> &x = *(g->x());
+    for (double i = 0; i < ndofs_local; ++i)
+    {
+        x.mutable_array()[i] = sin(i / ndofs_local);
+        // x.mutable_array()[i] = 1.;
+    }
 
     // GPU
-    // DeviceVector x_d(map, map_bs);
-    // DeviceVector y_d(map, map_bs);
-    // y_d.set(T{0.0});
-    // x_d.copy_from_host(x);
-    // std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
+    DeviceVector x_d(map, map_bs);
+    DeviceVector y_d(map, map_bs);
+    y_d.set(T{0.0});
+    x_d.copy_from_host(x);
+    std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
-    // {
-    //     auto start = std::chrono::high_resolution_clock::now();
-    //     for (int i = 0; i < nreps; ++i)
-    //     {
-    //         gpu_action_baseline(x_d, y_d);
-    //     }
-    //     auto stop = std::chrono::high_resolution_clock::now();
-    //     std::chrono::duration<double> duration = stop - start;
-    //     std::cout << "Baseline Mat-free Matvec time: " << duration.count()
-    //               << std::endl;
-    //     std::cout << "Baseline Mat-free action Gdofs/s: "
-    //               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-    // }
+    {
+        auto start = std::chrono::high_resolution_clock::now();
+        for (int i = 0; i < nreps; ++i)
+        {
+            gpu_action_baseline(x_d, y_d);
+        }
+        auto stop = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<double> duration = stop - start;
+        std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+                  << std::endl;
+        std::cout << "Baseline Mat-free action Gdofs/s: "
+                  << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+    }
     // {
     //     auto start = std::chrono::high_resolution_clock::now();
     //     for (int i = 0; i < nreps; ++i)
@@ -214,64 +221,35 @@ void solver(MPI_Comm comm, po::variables_map vm)
 
     if (matrix_comparison && std::is_same_v<T, PetscScalar>)
     {
-        auto g = std::make_shared<fem::Function<T>>(V);
         // Assemble linear form L
         auto L = std::make_shared<fem::Form<T>>(
-            fem::create_form<T>(*form_boundary_check_L, {V},
+            fem::create_form<T>(*form_mat_free_exterior_mass_L, {V},
                                 {{"g", g}}, {}, facet_domains_data, {}, {}));
-        la::Vector<T> b(map, map_bs);
-        b.set(0);
-        fem::assemble_vector(b.mutable_array(), *L);
-        double c = 0;
-        for (int i = 0; i < b.array().size(); ++i)
-        {
-            c += b.array()[i];
-        }
-
-        // la::Vector<T> y_h(map, map_bs);
-        // thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
-        //  y_h.mutable_array().begin());
-
-        // ----------- 2. CPU Matrix Free setup -----------
-        // auto coeff = fem::allocate_coefficient_storage(*M);
-        // std::vector<T> constants = fem::pack_constants(*M);
-
-        // Create function for computing the action of A on x (y = Ax)
-        // auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y)
+        la::Vector<T> y(map, map_bs);
+        y.set(0);
+        fem::assemble_vector(y.mutable_array(), *L);
+        // double c = 0;
+        // for (int i = 0; i < b.array().size(); ++i)
         // {
-        //     y.set(0.0);
-
-        //     // Update coefficient ui (just copy data from x to ui)
-        //     std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
-
-        //     // Compute action of A on x
-        //     fem::pack_coefficients(*M, coeff);
-        //     fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
-        //                          fem::make_coefficients_span(coeff));
-
-        //     // // Accumulate ghost values
-        //     // y.scatter_rev(std::plus<T>());
-
-        //     // // Update ghost values
-        //     // y.scatter_fwd();
-        // };
-
-        // la::Vector<T> y(map, map_bs);
-        // y.set(0.);
-        // std::cout << "norm(x)=" << la::norm(x) << "\n";
-        // cpu_action(x, y);
-        // std::cout << "norm(y)=" << la::norm(y) << "\n";
-        // double eps = 1e-6;
-        // bool check = true;
-        // for (int i = 0; i < ndofs_local; ++i)
-        // {
-        //     if (std::abs(y.array()[i] - y_h.array()[i]) > eps)
-        //     {
-        //         check = false;
-        //         break;
-        //     }
+        //     c += b.array()[i];
         // }
-        // std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
+        // std::cout << c << std::endl;
+
+        la::Vector<T> y_h(map, map_bs);
+        thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
+         y_h.mutable_array().begin());
+
+        double eps = 1e-6;
+        bool check = true;
+        for (int i = 0; i < ndofs_local; ++i)
+        {
+            if (std::abs(y.array()[i] - y_h.array()[i]) > eps)
+            {
+                std::cout << y.array()[i]  << " " <<  y_h.array()[i] << "\n";
+                check = false;
+            }
+        }
+        std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
     }
 }
 
