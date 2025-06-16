@@ -81,6 +81,7 @@ template <typename T>
 std::vector<T> compute_geometry(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
                                 std::vector<T> points, std::vector<T> weights)
 {
+
     // Number of quadrature points
     std::size_t nq = weights.size();
 
@@ -173,6 +174,7 @@ std::vector<T> compute_geometry_facets(std::shared_ptr<dolfinx::mesh::Mesh<T>> m
     std::span<const T> x_g = mesh->geometry().x();
 
     // Tabulate basis functions at quadrature points
+    // TODO this is wrong, quadrature points should be mapped to facets
     std::array<std::size_t, 4> phi_shape = cmap.tabulate_shape(1, nq);
     std::vector<T> phi_b(std::reduce(phi_shape.begin(), phi_shape.end(), 1, std::multiplies{}));
     std::mdspan<const T, std::dextents<std::size_t, 4>> phi(phi_b.data(), phi_shape);
@@ -241,6 +243,7 @@ std::vector<T> compute_geometry_facets(std::shared_ptr<dolfinx::mesh::Mesh<T>> m
             detJ(c, local_facet, q) = cmap.compute_jacobian_determinant(J_facet, det_scratch);
 
             detJ(c, local_facet, q) = std::fabs(detJ(c, local_facet, q)) * weights[q];
+            // detJ(c, local_facet, q) = std::fabs(detJ(c, local_facet, q));
         }
     }
 
@@ -276,7 +279,7 @@ std::vector<int32_t> make_faces_to_dofs_map(const fem::ElementDofLayout &dof_lay
 // Map points from a reference facet to a physical facet of a given cell type.
 template <typename T>
 std::vector<T> map_facet_points(
-    std::vector<T> const& points,  // flattened (nq × nd)
+    std::vector<T> const& points,  // flattened (nq × (tdim-1))
     int facet,                     // local facet index
     mesh::CellType cell_type)
 {
@@ -291,7 +294,7 @@ std::vector<T> map_facet_points(
     auto topo = basix::cell::sub_entity_connectivity(b_cell_type);
     const std::vector<int>& facet_verts = topo[tdim - 1][facet][0];  // list of vertex indices
 
-    std::vector<std::vector<T>> F(nverts, std::vector<T>(gdim));
+    std::vector<std::vector<T>> F(facet_verts.size(), std::vector<T>(gdim));
     for(int i = 0; i < facet_verts.size(); ++i) {
         for(int j = 0; j < gdim; ++j) {
             F[i][j] = vertices[gdim*facet_verts[i] + j];

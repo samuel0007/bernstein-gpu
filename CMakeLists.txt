@@ -4,7 +4,7 @@ option(cpu "Build for CPUs"	off)
 option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
-set(polynomial_degree 5 CACHE STRING "Polynomial degree")
+set(polynomial_degree 6 CACHE STRING "Polynomial degree")
 set(scalar_type "float64" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 message(STATUS "Scalar type: ${scalar_type}")
@@ -71,7 +71,7 @@ if (DEFINED ENV{CRAYPE_VERSION})
 endif()
 
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -lineinfo -std=c++20 --extended-lambda --expt-relaxed-constexpr")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
 if(NOT TARGET dolfinx)
   find_package(DOLFINX REQUIRED)
@@ -139,10 +139,21 @@ function(add_example name)
   endif()
 endfunction()
 
+
+# Forward operators
 add_example(mat_free_mass)
 add_example(mat_free_mass3D)
+add_example(mat_free_exterior_mass)
+add_example(mat_free_exterior_mass3D)
+add_example(mat_free_stiffness)
+add_example(mat_free_stiffness3D)
+add_example(mat_free_RHS)
+
+# Solvers
 add_example(mass_cg)
 add_example(mass3D_cg)
+
+# Acoustics
 add_example(planar_wave)
 add_example(planar_wave_triangles)
 add_example(planar_wave_triangles_gpu)
@@ -151,20 +162,3 @@ add_example(planar_wave_triangles_gpu_test)
 add_example(spherical_transducer_gpu)
 add_example(quad_gpu)
 add_example(hex_gpu)
-add_example(mat_free_exterior_mass)
-add_example(mat_free_exterior_mass3D)
-
-
-
-
-
-# Do not throw error for 'multi-line comments' (these are typical in rst which
-# includes LaTeX)
-# include(CheckCXXCompilerFlag)
-# check_cxx_compiler_flag("-Wno-comment" HAVE_NO_MULTLINE)
-# set_source_files_properties(
-#   main.cpp
-#   PROPERTIES
-#     COMPILE_FLAGS
-#     "$<$<BOOL:${HAVE_NO_MULTLINE}>:-Wno-comment -Wall -Wextra -pedantic -Werror>"
-# )

@@ -1,23 +1,16 @@
 #pragma once
 
-template <typename T, int Q>
-__constant__ T qwts0_d[Q];
-template <typename T, int Q>
-__constant__ T qpts0_d[Q];
+template <typename T, int Q> __constant__ T qwts0_d[Q];
+template <typename T, int Q> __constant__ T qpts0_d[Q];
 
-template <typename T, int Q>
-__constant__ T qwts1_d[Q];
-template <typename T, int Q>
-__constant__ T qpts1_d[Q];
+template <typename T, int Q> __constant__ T qwts1_d[Q];
+template <typename T, int Q> __constant__ T qpts1_d[Q];
 
-template <int N>
-__constant__ int dof_reordering_d[(N + 1) * N / 2];
-template <int N>
-__constant__ int dof_reordering3d_d[N * (N + 1) * (N + 2) / 6];
+template <int N> __constant__ int dof_reordering_d[(N + 1) * N / 2];
+template <int N> __constant__ int dof_reordering3d_d[N * (N + 1) * (N + 2) / 6];
 
 template <int ld0, int ld1, int ld2>
-__device__ __forceinline__ int ijk(int i, int j, int k)
-{
+__device__ __forceinline__ int ijk(int i, int j, int k) {
   return i * ld0 + j * ld1 + k * ld2;
 }
 
@@ -34,10 +27,8 @@ __launch_bounds__(Q *Q) __global__
     void mass_operator(const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
                        const T *__restrict__ alpha_cells,
                        const T *__restrict__ detJ_cells,
-                       const std::int32_t *__restrict__ dofmap)
-{
-  auto triangle_ij = [](auto i, auto j)
-  {
+                       const std::int32_t *__restrict__ dofmap) {
+  auto triangle_ij = [](auto i, auto j) {
     return (i + j + 1) * (i + j) / 2 + j;
   }; // Maps 2d grid to triangle: TODO think about ordering
 
@@ -70,12 +61,10 @@ __launch_bounds__(Q *Q) __global__
 
   if (ty < N)
     c1[ty][tx] = 0.;
-  if (tx < N && ty < N)
-  {
+  if (tx < N && ty < N) {
     in_local_dofs[ty][tx] = 0.;
   }
-  if (tx < N - ty && ty < N)
-  {
+  if (tx < N - ty && ty < N) {
     g_dof_idx = dofmap[l_dof_idx + cell_idx * K];
     in_local_dofs[ty][tx] = in_dofs[g_dof_idx];
     // printf("in_local_dofs[%d][%d] = %f\n", ty, tx, in_local_dofs[ty][tx]);
@@ -87,16 +76,14 @@ __launch_bounds__(Q *Q) __global__
   T s = 1.0 - p;
   T r = p / s;
   T w = 1.;
-  if (ty < N)
-  {
+  if (ty < N) {
     // T w = s^(N + 1 - ty);
     for (int i = 0; i < N - 1 - ty; ++i)
       w *= s;
 
     // printf("w[%d, %d]=%f\n", tx, ty, w);
 
-    for (int alpha2 = 0; alpha2 < N - ty; ++alpha2)
-    {
+    for (int alpha2 = 0; alpha2 < N - ty; ++alpha2) {
       // c1[ty][tx] += w;
       c1[ty][tx] += w * in_local_dofs[alpha2][ty];
       w *= r * (N - 1 - ty - alpha2) / (1 + alpha2);
@@ -113,8 +100,7 @@ __launch_bounds__(Q *Q) __global__
   T qval = 0.;
   for (int i = 0; i < N - 1; ++i)
     w *= s;
-  for (int alpha1 = 0; alpha1 < N; ++alpha1)
-  {
+  for (int alpha1 = 0; alpha1 < N; ++alpha1) {
     qval += w * c1[alpha1][ty];
     w *= r * (N - 1 - alpha1) / (1 + alpha1);
   }
@@ -130,23 +116,19 @@ __launch_bounds__(Q *Q) __global__
 
   // tx = alpha1
   // ty = i2
-  if (tx < N)
-  {
-    for (int i1 = 0; i1 < Q; ++i1)
-    {
+  if (tx < N) {
+    for (int i1 = 0; i1 < Q; ++i1) {
       T w = qwts1_d<T, Q>[i1];
       T p = qpts1_d<T, Q>[i1];
 
       T s = 1.0 - p;
       T r = p / s;
       // T ww = w * s ** n;
-      for (int i = 0; i < N - 1; ++i)
-      {
+      for (int i = 0; i < N - 1; ++i) {
         w *= s;
       }
       // ww *= r * (n - alpha1) / (1 + alpha1)
-      for (int i = 0; i < tx; ++i)
-      {
+      for (int i = 0; i < tx; ++i) {
         w *= r * (N - 1 - i) / (1 + i);
       }
       f1val += w * qvals[i1][ty];
@@ -161,21 +143,17 @@ __launch_bounds__(Q *Q) __global__
   // tx = alpha1
   // ty = alpha2
   T f2val = 0.;
-  if (tx < N && ty < N - tx)
-  {
-    for (int i2 = 0; i2 < Q; ++i2)
-    {
+  if (tx < N && ty < N - tx) {
+    for (int i2 = 0; i2 < Q; ++i2) {
       T w = qwts0_d<T, Q>[i2];
       T p = qpts0_d<T, Q>[i2];
       T s = 1.0 - p;
       T r = p / s;
-      for (int i = 0; i < N - 1 - tx; ++i)
-      {
+      for (int i = 0; i < N - 1 - tx; ++i) {
         w *= s;
       }
 
-      for (int i = 0; i < ty; ++i)
-      {
+      for (int i = 0; i < ty; ++i) {
         w *= r * (N - 1 - tx - i) / (1. + i);
       }
 
@@ -193,8 +171,7 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
                                        const T *__restrict__ alpha_cells,
                                        const T *__restrict__ detJ_cells,
                                        const std::int32_t *__restrict__ dofmap,
-                                       const T *__restrict__ phi)
-{
+                                       const T *__restrict__ phi) {
   const int tx = threadIdx.x;
   const int cell_idx = blockIdx.x;
   int g_dof_idx = -1;
@@ -204,8 +181,7 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
   __shared__ T in_local_dofs[nd];
   __shared__ T qvals[nq];
 
-  if (tx < nd)
-  {
+  if (tx < nd) {
     g_dof_idx = dofmap[tx + nd * cell_idx];
     in_local_dofs[tx] = in_dofs[g_dof_idx];
   }
@@ -216,8 +192,7 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
 
   // u_i(x_q)
   T qval = 0.;
-  for (int i = 0; i < nd; ++i)
-  {
+  for (int i = 0; i < nd; ++i) {
     qval += phi[tx * nd + i] * in_local_dofs[i]; // Bank conflict probably
   }
 
@@ -226,11 +201,9 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
   // if(cell_idx == 0)
   //   printf("qvals[%d]=%f \n", tx, qvals[tx]);
 
-  if (tx < nd)
-  {
+  if (tx < nd) {
     T fval = 0.;
-    for (int i = 0; i < nq; ++i)
-    {
+    for (int i = 0; i < nq; ++i) {
       fval += qvals[i] * phi[i * nd + tx];
     }
 
@@ -254,17 +227,13 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
 /// @param nq number of quadrature points on tdim - 1 entity
 /// @param K number of dofs on tdim entity
 template <typename T, int nd, int nq>
-__launch_bounds__(nd)
-    __global__ void facets_mass_operator_baseline(const T *__restrict__ in_dofs,
-                                                  T *__restrict__ out_dofs,
-                                                  const std::int32_t *__restrict__ cell_facet,
-                                                  const T *__restrict__ detJ_facets,
-                                                  const T *__restrict__ alpha_cells,
-                                                  const std::int32_t *__restrict__ dofmap,
-                                                  const T *__restrict__ facets_phi,
-                                                  const std::int32_t *__restrict__ faces_dofs,
-                                                  int n_faces)
-{
+// __launch_bounds__(max(nq, nd)) what i want to do
+ __global__ void facets_mass_operator_baseline(
+    const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
+    const std::int32_t *__restrict__ cell_facet,
+    const T *__restrict__ detJ_facets, const T *__restrict__ alpha_cells,
+    const std::int32_t *__restrict__ dofmap, const T *__restrict__ facets_phi,
+    const std::int32_t *__restrict__ faces_dofs, int n_faces) {
   const int tx = threadIdx.x;
   const int cell_idx = cell_facet[2 * blockIdx.x];
   const int local_face_idx = cell_facet[2 * blockIdx.x + 1];
@@ -274,34 +243,40 @@ __launch_bounds__(nd)
   __shared__ T in_local_dofs[nd];
   __shared__ T qvals[nq];
 
-  const T* phi = &facets_phi[local_face_idx * nd * nq];
+  const T *phi = &facets_phi[local_face_idx * nd * nq];
 
-  int g_dof_idx = dofmap[tx + nd * cell_idx];
-  in_local_dofs[tx] = in_dofs[g_dof_idx];
+  int g_dof_idx = -1;
+  if (tx < nd) {
+    g_dof_idx = dofmap[tx + nd * cell_idx];
+    in_local_dofs[tx] = in_dofs[g_dof_idx];
+  }
   __syncthreads();
 
   // u_i(x_q)
-  if (tx < nq)
-  {
+  if (tx < nq) {
     T qval = 0.;
-    for (int i = 0; i < nd; ++i)
-    {
+    for (int i = 0; i < nd; ++i) {
       qval += phi[tx * nd + i] * in_local_dofs[i]; // Bank conflict probably
     }
 
-    qvals[tx] = alpha * qval * detJ_facets[tx + local_face_idx * nq + cell_idx * n_faces * nq];
+    qvals[tx] = alpha * qval *
+                detJ_facets[tx + local_face_idx * nq + cell_idx * n_faces * nq];
     // printf("qvals[%d]=%f %d %d \n", tx, qvals[tx], local_face_idx, cell_idx);
+    // printf("detj[%d]=%f %d %d \n", tx,
+    //        detJ_facets[tx + local_face_idx * nq + cell_idx * n_faces * nq],
+    //        local_face_idx, cell_idx);
+
+    // printf("alpha[%d]=%f %d %d \n", tx, alpha, local_face_idx, cell_idx);
   }
 
   __syncthreads();
-
-  T fval = 0.;
-  for (int i = 0; i < nq; ++i)
-  {
-    fval += qvals[i] * phi[i * nd + tx];
+  if (tx < nd) {
+    T fval = 0.;
+    for (int i = 0; i < nq; ++i) {
+      fval += qvals[i] * phi[i * nd + tx];
+    }
+    atomicAdd(&out_dofs[g_dof_idx], fval);
   }
-
-  atomicAdd(&out_dofs[g_dof_idx], fval);
 }
 
 template <typename T, int nd, int nq>
@@ -309,16 +284,14 @@ __global__ void mass_diagonal(T *__restrict__ out_dofs,
                               const T *__restrict__ alpha_cells,
                               const T *__restrict__ detJ_cells,
                               const std::int32_t *__restrict__ dofmap,
-                              const T *__restrict__ phi)
-{
+                              const T *__restrict__ phi) {
   const int tx = threadIdx.x;
   const int cell_idx = blockIdx.x;
   int g_dof_idx = dofmap[tx + nd * cell_idx];
   T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
 
   T qval = 0.;
-  for (int i = 0; i < nq; ++i)
-  {
+  for (int i = 0; i < nq; ++i) {
     T phi_l = phi[i * nd + tx];
     qval += phi_l * phi_l * detJ_cells[i + cell_idx * nq];
   }
@@ -326,10 +299,8 @@ __global__ void mass_diagonal(T *__restrict__ out_dofs,
   atomicAdd(&out_dofs[g_dof_idx], qval * alpha);
 }
 
-template <typename T, int Q>
-__constant__ T qwts2_d[Q];
-template <typename T, int Q>
-__constant__ T qpts2_d[Q];
+template <typename T, int Q> __constant__ T qwts2_d[Q];
+template <typename T, int Q> __constant__ T qpts2_d[Q];
 
 /// Apply 3D mass matrix operator on tets \int alpha(x) * inner(u, v) dx to
 /// in_dofs.
@@ -346,10 +317,8 @@ __launch_bounds__(Q *Q *Q) __global__
                          T *__restrict__ out_dofs,
                          const T *__restrict__ alpha_cells,
                          const T *__restrict__ detJ_cells,
-                         const std::int32_t *__restrict__ dofmap)
-{
-  auto tet_ijk = [](int i, int j, int k)
-  {
+                         const std::int32_t *__restrict__ dofmap) {
+  auto tet_ijk = [](int i, int j, int k) {
     int w = i + j + k;
     int s = j + k;
     return (w + 2) * (w + 1) * w / 6 + (s + 1) * s / 2 + k;
@@ -364,8 +333,10 @@ __launch_bounds__(Q *Q *Q) __global__
 
   const int cell_idx = blockIdx.x;
 
-  const int l_dof_idx = dof_reordering3d_d<N>[tet_ijk(tz, ty, tx)]; // Only valid for ty < N - tz, tx < N - ty - tz
-  // const int l_dof_idx = tet_ijk(tz, ty, tx); // Only valid for ty < N - tz, tx < N - ty - tz
+  const int l_dof_idx = dof_reordering3d_d<N>[tet_ijk(
+      tz, ty, tx)]; // Only valid for ty < N - tz, tx < N - ty - tz
+  // const int l_dof_idx = tet_ijk(tz, ty, tx); // Only valid for ty < N - tz,
+  // tx < N - ty - tz
   int g_dof_idx = -1;
 
   T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
@@ -393,8 +364,7 @@ __launch_bounds__(Q *Q *Q) __global__
   if (tz < N)
     c2[tz][ty][tx] = 0.;
 
-  if (tx < N - ty - tz && ty < N - tz && tz < N)
-  {
+  if (tx < N - ty - tz && ty < N - tz && tz < N) {
     g_dof_idx = dofmap[l_dof_idx + cell_idx * K];
     // printf("l_dof_idx[%d][%d][%d] = %d\n", tz, ty, tx, l_dof_idx);
 
@@ -411,16 +381,14 @@ __launch_bounds__(Q *Q *Q) __global__
     T s = 1.0 - p;
     T r = p / s;
     T w = 1.;
-    if (ty < N - tz && tz < N)
-    { // tz := alpha1, ty := alpha2, tx := i3
+    if (ty < N - tz && tz < N) { // tz := alpha1, ty := alpha2, tx := i3
       // T w = s^(N - 1 - ty - tz);
       for (int i = 0; i < N - 1 - ty - tz; ++i)
         w *= s;
 
       // printf("w[%d, %d]=%f\n", tx, ty, w);
 
-      for (int alpha3 = 0; alpha3 < N - ty - tz; ++alpha3)
-      {
+      for (int alpha3 = 0; alpha3 < N - ty - tz; ++alpha3) {
         // c1[ty][tx] += w;
         c1[tz][ty][tx] += w * c0[tz][ty][alpha3];
         w *= r * (N - 1 - tz - ty - alpha3) / (1 + alpha3);
@@ -439,16 +407,14 @@ __launch_bounds__(Q *Q *Q) __global__
     T r = p / s;
     T w = 1.;
 
-    if (tz < N)
-    {
+    if (tz < N) {
       // T w = s^(N - 1 - tz);
       for (int i = 0; i < N - 1 - tz; ++i)
         w *= s;
 
       // printf("w[%d, %d]=%f\n", tx, ty, w);
 
-      for (int alpha2 = 0; alpha2 < N - tz; ++alpha2)
-      {
+      for (int alpha2 = 0; alpha2 < N - tz; ++alpha2) {
         // c1[ty][tx] += w;
         c2[tz][ty][tx] += w * c1[tz][alpha2][tx];
         w *= r * (N - 1 - tz - alpha2) / (1 + alpha2);
@@ -468,8 +434,7 @@ __launch_bounds__(Q *Q *Q) __global__
     T w = 1.;
     for (int i = 0; i < N - 1; ++i)
       w *= s;
-    for (int alpha1 = 0; alpha1 < N; ++alpha1)
-    {
+    for (int alpha1 = 0; alpha1 < N; ++alpha1) {
       qval += w * c2[alpha1][ty][tx];
       w *= r * (N - 1 - alpha1) / (1 + alpha1);
     }
@@ -503,10 +468,8 @@ __launch_bounds__(Q *Q *Q) __global__
   // 3.1 f0[Q][Q][Q] -> f1[N][Q][Q]
   // tz := alpha1, ty := i2, tx := i3
   {
-    if (tz < N)
-    {
-      for (int i1 = 0; i1 < Q; ++i1)
-      {
+    if (tz < N) {
+      for (int i1 = 0; i1 < Q; ++i1) {
         T p = qpts2_d<T, Q>[i1];
         T s = 1.0 - p;
         T r = p / s;
@@ -515,8 +478,7 @@ __launch_bounds__(Q *Q *Q) __global__
         for (int k = 0; k < N - 1; ++k)
           w *= s;
         // ww *= r * (n - alpha1) / (1 + alpha1)
-        for (int k = 0; k < tz; ++k)
-        {
+        for (int k = 0; k < tz; ++k) {
           w *= r * (N - 1 - k) / (1 + k);
         }
         f1[tz][ty][tx] += w * f0[i1][ty][tx];
@@ -529,10 +491,8 @@ __launch_bounds__(Q *Q *Q) __global__
   // 3.2 f1[N][Q][Q] -> f2[N][N][Q]
   // tz := alpha1, ty := alpha2, tx := i3
   {
-    if (tz < N && ty < N)
-    {
-      for (int i2 = 0; i2 < Q; ++i2)
-      {
+    if (tz < N && ty < N) {
+      for (int i2 = 0; i2 < Q; ++i2) {
         T p = qpts1_d<T, Q>[i2];
         T s = 1.0 - p;
         T r = p / s;
@@ -542,8 +502,7 @@ __launch_bounds__(Q *Q *Q) __global__
           w *= s;
         // ww *= r * (n - alpha1) / (1 + alpha1)
         // for (int k = 0; k < ty - tz; ++k) { // this also works
-        for (int k = 0; k < ty; ++k)
-        {
+        for (int k = 0; k < ty; ++k) {
           w *= r * (N - 1 - tz - k) / (1 + k);
         }
         f2[tz][ty][tx] += w * f1[tz][i2][tx];
@@ -555,10 +514,8 @@ __launch_bounds__(Q *Q *Q) __global__
   // 3.3 f2[N][N][Q] -> f3[N][N][N]
   // tz := alpha1, ty := alpha2, tx := alpha3
   {
-    if (tz < N && ty < N && tx < N)
-    {
-      for (int i3 = 0; i3 < Q; ++i3)
-      {
+    if (tz < N && ty < N && tx < N) {
+      for (int i3 = 0; i3 < Q; ++i3) {
         T p = qpts0_d<T, Q>[i3];
         T s = 1.0 - p;
         T r = p / s;
@@ -568,8 +525,7 @@ __launch_bounds__(Q *Q *Q) __global__
           w *= s;
 
         // for (int k = 0; k < tx - ty - tz; ++k) { // this also works
-        for (int k = 0; k < tx; ++k)
-        {
+        for (int k = 0; k < tx; ++k) {
           w *= r * (N - 1 - tz - ty - k) / (1 + k);
         }
         f3[tz][ty][tx] += w * f2[tz][ty][i3];
@@ -578,8 +534,7 @@ __launch_bounds__(Q *Q *Q) __global__
   }
   __syncthreads();
 
-  if (tx < N - ty - tz && ty < N - tz && tz < N)
-  {
+  if (tx < N - ty - tz && ty < N - tz && tz < N) {
     // if(cell_idx == 0)
     //   printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
     atomicAdd(&out_dofs[g_dof_idx], f3[tz][ty][tx]);
@@ -605,10 +560,8 @@ __launch_bounds__(Q *Q) __global__
                           const T *__restrict__ detJ_cells,
                           const std::int32_t *__restrict__ dofmap,
                           const T *__restrict__ phi_1,
-                          const T *__restrict__ phi_0_N)
-{
-  auto triangle_ij = [](auto i, auto j)
-  {
+                          const T *__restrict__ phi_0_N) {
+  auto triangle_ij = [](auto i, auto j) {
     return (i + j + 1) * (i + j) / 2 + j;
   }; // Maps 2d grid to triangle: TODO think about ordering
 
@@ -631,12 +584,10 @@ __launch_bounds__(Q *Q) __global__
 
   if (ty < N)
     c1[ty][tx] = 0.;
-  if (tx < N && ty < N)
-  {
+  if (tx < N && ty < N) {
     c0[ty][tx] = 0.;
   }
-  if (tx < N - ty && ty < N)
-  {
+  if (tx < N - ty && ty < N) {
     g_dof_idx = dofmap[l_dof_idx + cell_idx * K];
     c0[ty][tx] = in_dofs[g_dof_idx];
   }
@@ -647,10 +598,8 @@ __launch_bounds__(Q *Q) __global__
   // 1. Evaluate u(x_q) (dofs -> c2)
   // 1.1 c0[N][N] -> c1[N][Q]
   // ty := alpha1, tx := i2
-  if (ty < N)
-  {
-    for (int alpha2 = 0; alpha2 < N - ty; ++alpha2)
-    {
+  if (ty < N) {
+    for (int alpha2 = 0; alpha2 < N - ty; ++alpha2) {
       // B_alpha2^{p - alpha1}(t0)
       c1[ty][tx] +=
           phi_0_N[(N - 1 - ty) * Q * N + tx * N + alpha2] * c0[ty][alpha2];
@@ -662,8 +611,7 @@ __launch_bounds__(Q *Q) __global__
 
   T qval = 0.;
   // i1:= ty, i2 := tx
-  for (int alpha1 = 0; alpha1 < N; ++alpha1)
-  {
+  for (int alpha1 = 0; alpha1 < N; ++alpha1) {
     // Load B_alpha1^N(t1)
     qval += phi_1[ty * N + alpha1] * c1[alpha1][tx];
   }
@@ -690,10 +638,8 @@ __launch_bounds__(Q *Q) __global__
   // 3.1 f0[Q][Q] -> f1[N][Q]
   // ty := alpha1, tx := i2
   {
-    if (ty < N)
-    {
-      for (int i1 = 0; i1 < Q; ++i1)
-      {
+    if (ty < N) {
+      for (int i1 = 0; i1 < Q; ++i1) {
         T w = qwts1_d<T, Q>[i1];
         f1[ty][tx] += w * phi_1[i1 * N + ty] * f0[i1][tx];
       }
@@ -705,10 +651,8 @@ __launch_bounds__(Q *Q) __global__
   // 3.1 f1[N][Q] -> f2[Q][Q]
   // ty := alpha1, tx := alpha2
   {
-    if (ty < N && tx < N)
-    {
-      for (int i2 = 0; i2 < Q; ++i2)
-      {
+    if (ty < N && tx < N) {
+      for (int i2 = 0; i2 < Q; ++i2) {
         T w = qwts0_d<T, Q>[i2];
         f2[ty][tx] +=
             w * phi_0_N[(N - 1 - ty) * Q * N + i2 * N + tx] * f1[ty][i2];
@@ -716,8 +660,7 @@ __launch_bounds__(Q *Q) __global__
     }
   }
 
-  if (tx < N - ty && ty < N)
-  {
+  if (tx < N - ty && ty < N) {
     // printf("out_dof[%d]=%f \n", g_dof_idx, f3[tz][ty][tx]);
     atomicAdd(&out_dofs[g_dof_idx], f2[ty][tx]);
   }
@@ -739,10 +682,8 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
     const T *__restrict__ alpha_cells, const T *__restrict__ detJ_cells,
     const std::int32_t *__restrict__ dofmap, const T *__restrict__ phi_2,
-    const T *__restrict__ phi_1_N, const T *__restrict__ phi_0_N)
-{
-  auto tet_ijk = [](int i, int j, int k)
-  {
+    const T *__restrict__ phi_1_N, const T *__restrict__ phi_0_N) {
+  auto tet_ijk = [](int i, int j, int k) {
     int w = i + j + k;
     int s = j + k;
     return (w + 2) * (w + 1) * w / 6 + (s + 1) * s / 2 + k;
@@ -757,8 +698,8 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
 
   const int cell_idx = blockIdx.x;
 
-  const int l_dof_idx =
-      dof_reordering3d_d<N>[tet_ijk(tz, ty, tx)]; // Only valid for ty < N - tz, tx < N - ty - tz
+  const int l_dof_idx = dof_reordering3d_d<N>[tet_ijk(
+      tz, ty, tx)]; // Only valid for ty < N - tz, tx < N - ty - tz
   int g_dof_idx = -1;
 
   T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
@@ -775,13 +716,11 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   __shared__ T phi_1_N_s[N][Q][N];
   __shared__ T phi_2_s[Q][N];
 
-  if (tz < N && tx < N)
-  {
+  if (tz < N && tx < N) {
     phi_0_N_s[tz][ty][tx] = phi_0_N[tz * Q * N + ty * N + tx];
     phi_1_N_s[tz][ty][tx] = phi_1_N[tz * Q * N + ty * N + tx];
   }
-  if (tz == 0 && tx < N)
-  {
+  if (tz == 0 && tx < N) {
     phi_2_s[ty][tx] = phi_2[ty * N + tx];
   }
 
@@ -791,8 +730,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   if (tz < N && ty < N && tx < N)
     c0[ijk<N * N, N, 1>(tz, ty, tx)] = 0.;
 
-  if (tx < N - ty - tz && ty < N - tz && tz < N)
-  {
+  if (tx < N - ty - tz && ty < N - tz && tz < N) {
     g_dof_idx = dofmap[l_dof_idx + cell_idx * K];
     c0[ijk<N * N, N, 1>(tz, ty, tx)] = in_dofs[g_dof_idx];
   }
@@ -802,11 +740,9 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   T(&c1)
   [N * N * N] = scratch2; // nnq
   // 1.1 c0[N][N][N] -> c1[N][N][Q], scratch1 -> scratch2
-  if (ty < N - tz && tz < N)
-  { // tz := alpha1, ty := alpha2, tx := i3
+  if (ty < N - tz && tz < N) { // tz := alpha1, ty := alpha2, tx := i3
     T lc1 = 0.;
-    for (int alpha3 = 0; alpha3 < N - ty; ++alpha3)
-    {
+    for (int alpha3 = 0; alpha3 < N - ty; ++alpha3) {
       // B_alpha3^{p - alpha1 - alpha2}(t0)
       lc1 += phi_0_N_s[(N - 1 - tz - ty)][tx][alpha3] *
              c0[ijk<N * N, N, 1>(tz, ty, alpha3)];
@@ -820,11 +756,9 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   [N * N * N] = scratch1; // nqq
   // tz := alpha1, ty := i2, tx := i3
   {
-    if (tz < N)
-    {
+    if (tz < N) {
       T lc2 = 0.;
-      for (int alpha2 = 0; alpha2 < N - tz; ++alpha2)
-      {
+      for (int alpha2 = 0; alpha2 < N - tz; ++alpha2) {
         lc2 += phi_1_N_s[(N - 1 - tz)][ty][alpha2] *
                c1[ijk<N * Q, Q, 1>(tz, alpha2, tx)];
       }
@@ -838,8 +772,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   T(&c3)
   [N * N * N] = scratch2; // qqq
   T lc3 = 0.;
-  for (int alpha1 = 0; alpha1 < N; ++alpha1)
-  {
+  for (int alpha1 = 0; alpha1 < N; ++alpha1) {
     lc3 += phi_2_s[tz][alpha1] * c2[ijk<Q * Q, Q, 1>(alpha1, ty, tx)];
   }
 
@@ -853,18 +786,16 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
   T(&f0)
   [N * N * N] = c3; // qqq
 
-  // printf("f0[%d, %d, %d]=%f\n", tz, ty, tx, f0[ijk<Q * Q, Q, 1>(tz, ty, tx)]);
-  // 3.1 f0[Q][Q][Q] -> f1[N][Q][Q], scratch2 -> scratch1
+  // printf("f0[%d, %d, %d]=%f\n", tz, ty, tx, f0[ijk<Q * Q, Q, 1>(tz, ty,
+  // tx)]); 3.1 f0[Q][Q][Q] -> f1[N][Q][Q], scratch2 -> scratch1
   T(&f1)
   [N * N * N] = scratch1; // nqq
 
   // tz := alpha1, ty := i2, tx := i3
   {
-    if (tz < N)
-    {
+    if (tz < N) {
       T lf1 = 0.;
-      for (int i1 = 0; i1 < Q; ++i1)
-      {
+      for (int i1 = 0; i1 < Q; ++i1) {
         T w = qwts2_d<T, Q>[i1];
         lf1 += w * phi_2_s[i1][tz] * f0[ijk<Q * Q, Q, 1>(i1, ty, tx)];
       }
@@ -880,14 +811,12 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
 
   // tz := alpha1, ty := alpha2, tx := i3
   {
-    if (tz < N && ty < N)
-    {
+    if (tz < N && ty < N) {
       T lf2 = 0.;
-      for (int i2 = 0; i2 < Q; ++i2)
-      {
+      for (int i2 = 0; i2 < Q; ++i2) {
         T w = qwts1_d<T, Q>[i2];
-        lf2 +=
-            w * phi_1_N_s[(N - 1 - tz)][i2][ty] * f1[ijk<Q * Q, Q, 1>(tz, i2, tx)];
+        lf2 += w * phi_1_N_s[(N - 1 - tz)][i2][ty] *
+               f1[ijk<Q * Q, Q, 1>(tz, i2, tx)];
       }
       f2[ijk<N * Q, Q, 1>(tz, ty, tx)] = lf2;
     }
@@ -896,12 +825,10 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
 
   // 3.3 f2[N][N][Q] -> f3[N][N][N]
   // tz := alpha1, ty := alpha2, tx := alpha3
-  if (tx < N - ty - tz && ty < N - tz && tz < N)
-  {
+  if (tx < N - ty - tz && ty < N - tz && tz < N) {
 
     T lf3 = 0.;
-    for (int i3 = 0; i3 < Q; ++i3)
-    {
+    for (int i3 = 0; i3 < Q; ++i3) {
       T w = qwts0_d<T, Q>[i3];
       lf3 += w * phi_0_N_s[(N - 1 - tz - ty)][i3][tx] *
              f2[ijk<N * Q, Q, 1>(tz, ty, i3)];

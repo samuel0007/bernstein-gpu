@@ -67,7 +67,7 @@ This warning is for project developers.  Use -Wno-dev to suppress it.
 
 Remark: The warnings can be suppressed with "-diag-suppress <warning-number>"
 
-/local/data/public/sr2120/bernstein-gpu/src/kernels.hpp(176): error: zero-sized variable "qvals" is not allowed in device code
+/local/data/public/sr2120/bernstein-gpu/src/kernels_mass.hpp(176): error: zero-sized variable "qvals" is not allowed in device code
     __attribute__((shared)) T qvals[nq];
                               ^
           detected during:

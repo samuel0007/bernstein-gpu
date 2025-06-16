@@ -2,7 +2,7 @@
 
 #include "dof_ordering.hpp"
 #include "geometry.hpp"
-#include "kernels.hpp"
+#include "kernels_mass.hpp"
 #include "quadrature.hpp"
 #include "util.hpp"
 #include "vector.hpp"

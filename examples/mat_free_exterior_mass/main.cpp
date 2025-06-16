@@ -114,14 +114,14 @@ void solver(MPI_Comm comm, po::variables_map vm)
         facet_domains_data;
 
     std::vector<int> ft_unique = {1};
-    for (auto &tag : ft_unique)
+    for (int i = 0; i < ft_unique.size(); ++i)
     {
+        int tag = ft_unique[i];
         std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
             fem::IntegralType::exterior_facet, *V->mesh()->topology_mutable(),
             bfacets);
-        // ft->find(tag);
         facet_domains.push_back({tag, facet_domain});
-        facet_domains_data[fem::IntegralType::exterior_facet].push_back({tag, std::span(facet_domain.data(), facet_domain.size())});
+        facet_domains_data[fem::IntegralType::exterior_facet].push_back({tag, facet_domains[i].second});
     }
 
     {
@@ -167,8 +167,8 @@ void solver(MPI_Comm comm, po::variables_map vm)
     la::Vector<T> &x = *(g->x());
     for (double i = 0; i < ndofs_local; ++i)
     {
-        x.mutable_array()[i] = sin(i / ndofs_local);
-        // x.mutable_array()[i] = 1.;
+        // x.mutable_array()[i] = sin(i / ndofs_local);
+        x.mutable_array()[i] = 1.;
     }
 
     // GPU
@@ -182,6 +182,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < nreps; ++i)
         {
+            y_d.set(0);
             gpu_action_baseline(x_d, y_d);
         }
         auto stop = std::chrono::high_resolution_clock::now();
@@ -224,10 +225,11 @@ void solver(MPI_Comm comm, po::variables_map vm)
         // Assemble linear form L
         auto L = std::make_shared<fem::Form<T>>(
             fem::create_form<T>(*form_mat_free_exterior_mass_L, {V},
-                                {{"g", g}}, {}, facet_domains_data, {}, {}));
+                                {{"g", g}, {"alpha", alpha}}, {}, facet_domains_data, {}, {}));
         la::Vector<T> y(map, map_bs);
         y.set(0);
         fem::assemble_vector(y.mutable_array(), *L);
+        std::cout << "norm(y)=" << la::norm(y) << "\n";
         // double c = 0;
         // for (int i = 0; i < b.array().size(); ++i)
         // {
@@ -239,7 +241,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
         thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
          y_h.mutable_array().begin());
 
-        double eps = 1e-6;
+        double eps = 1e-10;
         bool check = true;
         for (int i = 0; i < ndofs_local; ++i)
         {

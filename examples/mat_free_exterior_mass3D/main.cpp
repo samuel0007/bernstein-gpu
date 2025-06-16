@@ -44,7 +44,7 @@ po::variables_map get_cli_config(int argc, char *argv[])
     po::options_description desc("Allowed options");
     // clang-format off
   desc.add_options()("help,h", "print usage message")
-      ("nelements", po::value<int>()->default_value(2), "Number of elements (1D)")
+      ("nelements", po::value<int>()->default_value(3), "Number of elements (1D)")
       ("nreps", po::value<int>()->default_value(1), "number of repetitions")
       ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator");
     // clang-format on
@@ -114,14 +114,14 @@ void solver(MPI_Comm comm, po::variables_map vm)
         facet_domains_data;
 
     std::vector<int> ft_unique = {1};
-    for (auto &tag : ft_unique)
+    for (int i = 0; i < ft_unique.size(); ++i)
     {
+        int tag = ft_unique[i];
         std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
             fem::IntegralType::exterior_facet, *V->mesh()->topology_mutable(),
             bfacets);
-        // ft->find(tag);
         facet_domains.push_back({tag, facet_domain});
-        facet_domains_data[fem::IntegralType::exterior_facet].push_back({tag, std::span(facet_domain.data(), facet_domain.size())});
+        facet_domains_data[fem::IntegralType::exterior_facet].push_back({tag, facet_domains[i].second});
     }
 
     {
@@ -182,6 +182,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
         auto start = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < nreps; ++i)
         {
+            y_d.set(0);
             gpu_action_baseline(x_d, y_d);
         }
         auto stop = std::chrono::high_resolution_clock::now();
@@ -224,7 +225,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
         // Assemble linear form L
         auto L = std::make_shared<fem::Form<T>>(
             fem::create_form<T>(*form_mat_free_exterior_mass3D_L, {V},
-                                {{"g", g}}, {}, facet_domains_data, {}, {}));
+                                {{"g", g}, {"alpha", alpha}}, {}, facet_domains_data, {}, {}));
         la::Vector<T> y(map, map_bs);
         y.set(0);
         fem::assemble_vector(y.mutable_array(), *L);
