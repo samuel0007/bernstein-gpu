@@ -138,10 +138,6 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   }
 
   // ----------- 2. GPU Matrix Free setup -----------
-  acc::MatFreeMassSF<T, polynomial_degree, quadrature_points> gpu_action_sf(
-      mesh, V, alpha->x()->array());
-  acc::MatFreeMass<T, polynomial_degree, quadrature_points> gpu_action(
-      mesh, V, alpha->x()->array());
   acc::MatFreeStiffness3D<T, polynomial_degree, quadrature_points>
       gpu_action_baseline(mesh, V, alpha->x()->array());
 

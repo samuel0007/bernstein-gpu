@@ -1,10 +1,11 @@
 cmake_minimum_required(VERSION 3.19)
+enable_testing()
 
 option(cpu "Build for CPUs"	off)
 option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
-set(polynomial_degree 6 CACHE STRING "Polynomial degree")
+set(polynomial_degree 2 CACHE STRING "Polynomial degree")
 set(scalar_type "float64" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 message(STATUS "Scalar type: ${scalar_type}")
@@ -104,7 +105,28 @@ set(CMAKE_INCLUDE_CURRENT_DIR ON)
 add_library(bernsteinlib INTERFACE)
 target_include_directories(bernsteinlib INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
-function(add_example name)
+function(link_common target)
+  target_link_libraries(${target}
+    PRIVATE
+      dolfinx
+      bernsteinlib
+      Boost::program_options
+  )
+
+  if(amd)
+    target_compile_definitions(${target} PRIVATE USE_HIP=1)
+    set_source_files_properties(${ARGN} PROPERTIES LANGUAGE HIP)
+    set_target_properties(${target} PROPERTIES LINKER_LANGUAGE HIP)
+  elseif(nvidia)
+    target_compile_definitions(${target} PRIVATE USE_CUDA=1)
+    set_source_files_properties(${ARGN} PROPERTIES LANGUAGE CUDA)
+    set_target_properties(${target} PROPERTIES LINKER_LANGUAGE CUDA)
+  elseif(cpu)
+    target_compile_definitions(${target} PRIVATE CPU_ONLY=1)
+  endif()
+endfunction()
+
+function(add_example name is_test)
   set(example_dir ${CMAKE_CURRENT_SOURCE_DIR}/examples/${name})
   set(pyfile ${example_dir}/${name}.py)
   set(cfile ${CMAKE_CURRENT_BINARY_DIR}/${name}.c)
@@ -118,7 +140,7 @@ function(add_example name)
   )
 
   add_executable(${name} ${example_dir}/main.cpp ${cfile})
-  target_link_libraries(${name} PRIVATE dolfinx bernsteinlib Boost::program_options)
+  link_common(${name} ${example_dir}/main.cpp)
 
   target_compile_definitions(${name}
     PRIVATE
@@ -126,39 +148,39 @@ function(add_example name)
       POLYNOMIAL_DEGREE=${polynomial_degree}
   )
 
-  if(amd)
-    target_compile_definitions(${name} PRIVATE USE_HIP=1)
-    set_source_files_properties(${example_dir}/main.cpp PROPERTIES LANGUAGE HIP)
-    set_target_properties(${name} PROPERTIES LINKER_LANGUAGE HIP)
-  elseif(nvidia)
-    target_compile_definitions(${name} PRIVATE USE_CUDA=1)
-    set_source_files_properties(${example_dir}/main.cpp PROPERTIES LANGUAGE CUDA)
-    set_target_properties(${name} PROPERTIES LINKER_LANGUAGE CUDA)
-  elseif(cpu)
-    target_compile_definitions(${name} PRIVATE CPU_ONLY=1)
+  if(is_test)
+    add_test(NAME ${name} COMMAND ${name})
+    set_tests_properties(${name}
+      PROPERTIES
+        PASS_REGULAR_EXPRESSION "PASSED"
+        FAIL_REGULAR_EXPRESSION "FAILED"
+    )
   endif()
 endfunction()
 
-
 # Forward operators
-add_example(mat_free_mass)
-add_example(mat_free_mass3D)
-add_example(mat_free_exterior_mass)
-add_example(mat_free_exterior_mass3D)
-add_example(mat_free_stiffness)
-add_example(mat_free_stiffness3D)
-add_example(mat_free_RHS)
+add_example(mat_free_mass ON)
+add_example(mat_free_mass3D ON)
+add_example(mat_free_exterior_mass ON)
+add_example(mat_free_exterior_mass3D ON)
+add_example(mat_free_stiffness ON)
+add_example(mat_free_stiffness3D ON)
+add_example(mat_free_RHS ON)
 
 # Solvers
-add_example(mass_cg)
-add_example(mass3D_cg)
+add_example(mass_cg ON)
+add_example(mass3D_cg ON)
 
-# Acoustics
-add_example(planar_wave)
-add_example(planar_wave_triangles)
-add_example(planar_wave_triangles_gpu)
-add_example(planar_wave_tets_gpu)
-add_example(planar_wave_triangles_gpu_test)
-add_example(spherical_transducer_gpu)
-add_example(quad_gpu)
-add_example(hex_gpu)
+# Acoustics Examples
+add_example(planar_wave OFF)
+add_example(planar_wave_triangles OFF)
+add_example(planar_wave_triangles_gpu OFF)
+add_example(planar_wave_tets_gpu OFF)
+add_example(planar_wave_triangles_gpu_test OFF)
+add_example(spherical_transducer_gpu OFF)
+add_example(quad_gpu OFF)
+add_example(hex_gpu OFF)
+
+
+# Apps
+add_subdirectory(apps/ExaFUS)

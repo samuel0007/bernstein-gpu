@@ -121,9 +121,9 @@ public:
 
     std::vector<std::int32_t> facet_domains;
     for (auto &tag : ft_unique) {
-      facet_domains = fem::compute_integration_domains(
+      facet_domains = ffem::compute_integration_domains(
           fem::IntegralType::exterior_facet, *V->mesh()->topology_mutable(),
-          ft->find(tag), mesh->topology()->dim() - 1);
+          ft->find(tag));
       fd[fem::IntegralType::exterior_facet].push_back({tag, facet_domains});
     }
 

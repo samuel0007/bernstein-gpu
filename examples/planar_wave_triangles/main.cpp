@@ -137,10 +137,10 @@ int main(int argc, char* argv[]) {
     model.rk4(startTime, finalTime, timeStepSize);
     tsolve.stop();
 
-    if (mpi_rank == 0) {
-      std::cout << "Solve time: " << tsolve.elapsed()[0] << "s" << std::endl;
-      std::cout << "Time per step: " << tsolve.elapsed()[0] / numberOfStep << "s" << std::endl;
-    }
+    // if (mpi_rank == 0) {
+    //   std::cout << "Solve time: " << tsolve.elapsed()[0] << "s" << std::endl;
+    //   std::cout << "Time per step: " << tsolve.elapsed()[0] / numberOfStep << "s" << std::endl;
+    // }
 
     // Final solution
     auto u_n = model.u_sol();
