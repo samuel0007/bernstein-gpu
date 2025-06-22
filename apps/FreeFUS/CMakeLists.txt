@@ -1,4 +1,4 @@
-project(ExaFUS LANGUAGES CXX)
+project(FreeFUS LANGUAGES CXX)
 # Options
 set(DIMENSION        3
     CACHE STRING "Spatial dimension (2, 3)")
@@ -17,6 +17,12 @@ add_executable(${PROJECT_NAME}
   main.cpp
 )
 
+target_include_directories(${PROJECT_NAME}
+  PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+)
+
+
 # set(pyfile   ${CMAKE_CURRENT_SOURCE_DIR}/fus.py)
 # set(cfile    ${CMAKE_CURRENT_BINARY_DIR}/fus.c)
 
@@ -33,12 +39,15 @@ add_executable(${PROJECT_NAME}
 # )
 
 link_common(${PROJECT_NAME} main.cpp)
+target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent)
+
 
 target_compile_definitions(${PROJECT_NAME}
   PRIVATE
-    EXAFUS=1
+    FREEFUS=1
     POLYNOMIAL_DEGREE=${polynomial_degree}
     SCALAR_TYPE_STR="${scalar_type}"
+    DATA_DIR="${CMAKE_CURRENT_SOURCE_DIR}/data"
 )
 
 if(CMAKE_CUDA_COMPILER)

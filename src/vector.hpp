@@ -68,6 +68,7 @@ enum class Device
   CPP
 };
 
+
 // Container for local data
 template <typename T, Device D>
 using container
@@ -326,6 +327,17 @@ private:
   // Vector data
   container<T, D> _x;
 };
+
+
+#if USE_HIP
+template <typename T>
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::HIP>;
+#elif USE_CUDA
+template <typename T>
+using DeviceVector = dolfinx::acc::Vector<T, acc::Device::CUDA>;
+#else
+static_assert(false)
+#endif
 
 /// Compute the inner product of two vectors. The two vectors must have
 /// the same parallel layout

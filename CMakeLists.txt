@@ -183,4 +183,4 @@ add_example(hex_gpu OFF)
 
 
 # Apps
-add_subdirectory(apps/ExaFUS)
+add_subdirectory(apps/FreeFUS)
