@@ -12,6 +12,8 @@ using namespace ascent;
 using namespace conduit;
 using namespace dolfinx;
 
+namespace ascent_h {
+
 static const std::unordered_map<mesh::CellType, std::string> dolfinx_celltype_to_blueprint = {
     {mesh::CellType::point, "point"},
     {mesh::CellType::interval, "line"},
@@ -22,12 +24,23 @@ static const std::unordered_map<mesh::CellType, std::string> dolfinx_celltype_to
     {mesh::CellType::prism, "prism"},
     {mesh::CellType::pyramid, "pyramid"}};
 
-
-
 /// @brief Mesh the reference triangle assuming a lagrangian space structure
 /// @param P 
 /// @return dof connectivity
 std::vector<int> MeshRefTriangle(const int P) {
+    switch(P) {
+        case 1: return {0, 1, 2};
+        case 2: return {0, 5, 4, 5, 1, 3, 3, 4, 5, 4, 3, 2};
+        case 3: return {0, 7, 5, 7, 8, 9, 8, 1, 3, 9, 5, 7, 3, 9, 8, 5, 9, 6, 9, 3, 4, 4, 6, 9, 6, 4, 2};
+        case 4: return {3, 11, 1, 4, 5, 14, 8, 5, 2, 4, 13, 3, 6, 12, 7, 7, 12, 14, 9, 12, 0, 12, 6, 0, 5, 8, 7, 5, 7, 14, 11, 13, 10, 13, 11, 3, 12, 13, 14, 13, 4, 14, 13, 9, 10, 13, 12, 9};
+        case 5: return {17, 3, 4, 3, 14, 1, 6, 20, 5, 10, 6, 2, 5, 19, 4, 14, 17, 13, 17, 14, 3, 13, 16, 12, 17, 16, 13, 18, 9, 8, 9, 18, 20, 10, 9, 20, 10, 20, 6, 15, 11, 12, 16, 15, 12, 15, 7, 0, 11, 15, 0, 7, 15, 8, 15, 18, 8, 15, 19, 18, 19, 15, 16, 19, 16, 17, 19, 17, 4, 18, 19, 20, 20, 19, 5};
+        default:
+            throw std::invalid_argument("MeshRefTriangle: unsupported P = " + std::to_string(P));
+    }
+}
+
+// TODO
+std::vector<int> MeshRefTetrahedron(const int P) {
     switch(P) {
         case 1: return {0, 1, 2};
         case 2: return {0, 5, 4, 5, 1, 3, 3, 4, 5, 4, 3, 2};
@@ -74,6 +87,7 @@ void MeshToBlueprintMesh(std::shared_ptr<fem::FunctionSpace<T>> V, const int P, 
     const int num_local_cells = topology->index_map(tdim)->size_local();
 
     // Ref triangle connectivity
+    // TODO
     std::vector<int> local_connectivity = MeshRefTriangle(P);
     const int P2 = P * P;
     assert(local_connectivity.size() == P2 * 3);
@@ -113,3 +127,6 @@ void FunctionToBlueprintField(std::shared_ptr<fem::Function<T>> f,
     out["fields"][field_name]["topology"] = "mesh";
     out["fields"][field_name]["values"].set_external(values.data(), values.size());
 }
+
+}
+
