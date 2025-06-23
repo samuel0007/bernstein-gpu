@@ -177,7 +177,7 @@ public:
     T rnorm0 = acc::inner_product(*_p, *_r);
     T rnorm = rnorm0;
 
-    spdlog::info("CG: rnorm0 = {}", rnorm0);
+    spdlog::debug("CG: rnorm0 = {}", rnorm0);
     if(rnorm0 < 1e-20) return 0;
 
     // Iterations of CG
@@ -217,7 +217,7 @@ public:
       const T beta = rnorm_new / rnorm;
       rnorm = rnorm_new;
 
-      spdlog::info("CG: {} rnorm = {}", k, rnorm);
+      spdlog::debug("CG: {} rnorm = {}", k, rnorm);
 
       if (rank == 0 and verbose)
       {
@@ -246,7 +246,7 @@ public:
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
     // std::cout << "CG loop only time : " << duration.count() << std::endl;
-    spdlog::info("rnorm = {}", rnorm);
+    spdlog::debug("rnorm = {}", rnorm);
 
     return k;
   }

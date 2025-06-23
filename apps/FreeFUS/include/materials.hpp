@@ -39,9 +39,10 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<T>> V_DG,
 
   for (auto material : materials_data) {
     auto cells = mesh_data.cell_tags->find(material.domain_id);
-    spdlog::info("Material domain id {}, sounds speed {}, density {}, #cells {}",
-                 material.domain_id, material.sound_speed, material.density,
-                 cells.size());
+    spdlog::info(
+        "Material domain id {}, sounds speed {}, density {}, #cells {}",
+        material.domain_id, material.sound_speed, material.density,
+        cells.size());
     std::span<T> c0_ = c0->x()->mutable_array();
     std::for_each(cells.begin(), cells.end(),
                   [&](std::int32_t &i) { c0_[i] = material.sound_speed; });
@@ -55,4 +56,15 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<T>> V_DG,
 
   return std::make_tuple(c0, rho0);
 };
+
+template <typename T> T get_source_sound_speed(MaterialCase material_case) {
+  std::vector<materials::Material<T>> materials_data =
+      materials::getMaterialsData<T>(material_case);
+  for (auto material : materials_data) {
+    if (material.domain_id == 1)
+      return material.sound_speed;
+  }
+  assert(false && "No Material Source found");
+  return 0.;
+}
 } // namespace freefus

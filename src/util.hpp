@@ -3,6 +3,7 @@
 #include <cstdio>
 #include <sstream>
 #include <thrust/device_vector.h>
+#include <format>
 
 template<typename InputIt, typename T>
 auto copy_to_device(InputIt first,

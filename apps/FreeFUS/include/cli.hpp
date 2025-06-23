@@ -22,15 +22,23 @@ static const std::unordered_map<std::string, el::lagrange_variant>
                       {"gll_warped", el::lagrange_variant::gll_warped}};
 
 template <typename T> void display_user_config(const UserConfig<T> &cfg) {
-  spdlog::info("Mesh name        : {}", cfg.mesh_name);
-  spdlog::info("Output file      : {}", cfg.output_filepath);
-  spdlog::info("Material Case    : {}", static_cast<int>(cfg.material_case));
-  spdlog::info("CFL number       : {}", cfg.CFL);
-  spdlog::info("Source freq (Hz) : {}", cfg.source_frequency);
-  spdlog::info("Source amp (Pa)  : {}", cfg.source_amplitude);
-  spdlog::info("Domain length (m): {}", cfg.domain_length);
-  spdlog::info("Output steps     : {}", cfg.output_steps);
-  spdlog::info("Log level        : {}",
+  spdlog::info("Mesh name              : {}", cfg.mesh_name);
+  spdlog::info("Mesh filepath          : {}", cfg.mesh_filepath);
+  spdlog::info("Output file            : {}", cfg.output_filepath);
+  spdlog::info("Material Case          : {}",
+               static_cast<int>(cfg.material_case));
+  spdlog::info("Model type             : {}", static_cast<int>(cfg.model_type));
+  spdlog::info("CFL number             : {}", cfg.CFL);
+  spdlog::info("Source freq (Hz)       : {}", cfg.source_frequency);
+  spdlog::info("Source amp (Pa)        : {}", cfg.source_amplitude);
+  spdlog::info("Domain length (m)      : {}", cfg.domain_length);
+  spdlog::info("Output steps           : {}", cfg.output_steps);
+  spdlog::info("In-situ output enabled : {}", cfg.insitu);
+  spdlog::info("In-situ output steps   : {}", cfg.insitu_output_steps);
+  spdlog::info("CG tolerance           : {}", cfg.cg_tol);
+  spdlog::info("CG max iterations      : {}", cfg.cg_max_steps);
+  spdlog::info("Window length (periods): {}", cfg.window_length);
+  spdlog::info("Log level              : {}",
                spdlog::level::to_string_view(cfg.log_level));
 }
 
@@ -57,10 +65,16 @@ UserConfig<T> make_user_config(const po::variables_map &vm) {
   cfg.material_case = static_cast<MaterialCase>(vm["material-case"].as<int>());
   cfg.insitu = vm["insitu"].as<bool>();
   cfg.insitu_output_steps = vm["insitu-output-steps"].as<int>();
+  cfg.model_type = static_cast<ModelType>(vm["model-type"].as<int>());
+  cfg.cg_tol = vm["cg-tol"].as<double>();
+  cfg.cg_max_steps = vm["cg-maxsteps"].as<int>();
+  cfg.window_length = vm["window-length"].as<double>();
+
   return cfg;
 }
 
-template <typename T> po::variables_map get_cli_config(int argc, char *argv[]) {
+template <typename T>
+po::variables_map parse_cli_config(int argc, char *argv[]) {
 
   po::options_description desc("Allowed options");
   // clang-format off
@@ -69,13 +83,17 @@ template <typename T> po::variables_map get_cli_config(int argc, char *argv[]) {
       ("output-path,o", po::value<std::string>()->default_value("output.bp"), "output path, must end in .bp")
       ("polynomial-basis", po::value<std::string>()->default_value("gll_warped"), "Polynomial basis: bernstein, gll_warped")
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
+      ("model-type", po::value<int>()->default_value(1), "Model type [1-]")
       ("CFL", po::value<T>()->default_value(0.5), "CFL number")
       ("source-frequency", po::value<T>()->default_value(0.5e6), "Source frequency (Hz)")
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
       ("domain-length", po::value<T>()->default_value(0.12), "Domain length (m)")
+      ("window-length", po::value<T>()->default_value(4), "Window length (periods)")
       ("output-steps", po::value<int>()->default_value(50), "Number of I/O output steps")
       ("insitu", po::value<bool>()->default_value(true), "Insitu visualisation")
       ("insitu-output-steps", po::value<int>()->default_value(200), "Number of insitu output steps")
+      ("cg-tol", po::value<T>()->default_value(1e-8), "Tolerance of CG solver")
+      ("cg-maxsteps", po::value<int>()->default_value(200), "Max number of CG iterations")
       ("log-level", po::value<std::string>()->default_value("info"),
        "Log level: trace, debug, info, warn, err, critical, off");
   // clang-format on

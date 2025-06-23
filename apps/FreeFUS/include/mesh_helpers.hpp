@@ -44,7 +44,18 @@ T compute_global_min_cell_size(
   T min_global;
   MPI_Allreduce(&min_local, &min_global, 1, dolfinx::MPI::mpi_t<T>, MPI_MIN,
                 mesh_ptr->comm());
-  spdlog::info("Global mesh size: {}", min_global);
+  spdlog::info("Global min mesh size: {}", min_global);
+  return min_global;
+}
+
+template <typename T>
+T compute_global_minimum_sound_speed(MPI_Comm comm, auto material_coefficients) {
+  auto &c0 = std::get<1>(material_coefficients);
+  T min_local = *std::min_element(c0->x()->array().begin(), c0->x()->array().end());
+  T min_global;
+  MPI_Allreduce(&min_local, &min_global, 1, dolfinx::MPI::mpi_t<T>, MPI_MIN,
+                comm);
+  spdlog::info("Global min sound speed: {}", min_global);
   return min_global;
 }
 

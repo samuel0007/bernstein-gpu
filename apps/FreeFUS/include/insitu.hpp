@@ -4,6 +4,8 @@
 #include <dolfinx.h>
 #include <memory>
 
+namespace freefus {
+
 template <typename T>
 void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
                   int polynomial_degree,
@@ -15,6 +17,9 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
   // Data is passed by reference
   ascent_h::FunctionToBlueprintField(solution, conduit_mesh, field_name);
 
+  Node ascent_opts;
+  // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
+  // ascent_runner.open(ascent_opts);
   ascent_runner.open();
   ascent_runner.publish(conduit_mesh);
 
@@ -30,3 +35,5 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
 
   spdlog::info("Ascent actions {}", ascent_actions.to_yaml());
 }
+
+} // namespace freefus
