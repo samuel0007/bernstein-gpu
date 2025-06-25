@@ -5,9 +5,9 @@
 #include "vector.hpp"
 
 namespace freefus {
-template <typename T>
-auto create_solver(std::shared_ptr<fem::FunctionSpace<T>> V,
-                   const UserConfig<T> config) {
+template <typename T, typename U>
+auto create_solver(std::shared_ptr<fem::FunctionSpace<U>> V,
+                   const UserConfig<U> config) {
 
   auto index_map = V->dofmap()->index_map;
   auto bs = V->dofmap()->index_map_bs();

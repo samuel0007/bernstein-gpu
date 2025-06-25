@@ -42,10 +42,10 @@ template <typename T> void display_user_config(const UserConfig<T> &cfg) {
                spdlog::level::to_string_view(cfg.log_level));
 }
 
-template <typename T>
-UserConfig<T> make_user_config(const po::variables_map &vm) {
+template <typename U>
+UserConfig<U> make_user_config(const po::variables_map &vm) {
   namespace fs = std::filesystem;
-  UserConfig<T> cfg;
+  UserConfig<U> cfg;
   cfg.mesh_name = vm["mesh"].as<std::string>();
   cfg.mesh_filepath = fs::path(DATA_DIR) / cfg.mesh_name / "mesh.xdmf";
   cfg.lvariant = str_to_basixlv.at(vm["polynomial-basis"].as<std::string>());
@@ -56,10 +56,10 @@ UserConfig<T> make_user_config(const po::variables_map &vm) {
       throw std::invalid_argument("output_path must end with .bp");
   }
 
-  cfg.CFL = vm["CFL"].as<T>();
-  cfg.source_frequency = vm["source-frequency"].as<T>();
-  cfg.source_amplitude = vm["source-amplitude"].as<T>();
-  cfg.domain_length = vm["domain-length"].as<T>();
+  cfg.CFL = vm["CFL"].as<U>();
+  cfg.source_frequency = vm["source-frequency"].as<U>();
+  cfg.source_amplitude = vm["source-amplitude"].as<U>();
+  cfg.domain_length = vm["domain-length"].as<U>();
   cfg.output_steps = vm["output-steps"].as<int>();
   cfg.log_level = spdlog::level::from_str(vm["log-level"].as<std::string>());
   cfg.material_case = static_cast<MaterialCase>(vm["material-case"].as<int>());
@@ -79,7 +79,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
-      ("mesh,m", po::value<std::string>()->default_value("test_mesh"), "mesh folder name")
+      ("mesh,m", po::value<std::string>()->default_value("spherical_2d"), "mesh folder name")
       ("output-path,o", po::value<std::string>()->default_value("output.bp"), "output path, must end in .bp")
       ("polynomial-basis", po::value<std::string>()->default_value("gll_warped"), "Polynomial basis: bernstein, gll_warped")
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")

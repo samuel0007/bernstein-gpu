@@ -10,10 +10,10 @@
 /// This runs on the GPU.
 /// @param[in] mesh The mesh object
 /// @param[in] points The quadrature points to compute Jacobian of the map
-template <typename T, int nq>
+template <typename T, typename U, int nq>
 std::span<T>
-compute_stiffness_geometry_triangle_GPU(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
-                               std::vector<T> points, std::vector<T> weights,
+compute_stiffness_geometry_triangle_GPU(std::shared_ptr<dolfinx::mesh::Mesh<U>> mesh,
+                               std::vector<U> points, std::vector<U> weights,
                                thrust::device_vector<T>& G_entity)
 {
     const std::size_t tdim = mesh->topology()->dim();
@@ -23,7 +23,7 @@ compute_stiffness_geometry_triangle_GPU(std::shared_ptr<dolfinx::mesh::Mesh<T>> 
     assert(weights.size() == nq);
     G_entity.resize(nc * 3 * nq);
 
-    const fem::CoordinateElement<T> &cmap = mesh->geometry().cmap();
+    const fem::CoordinateElement<U> &cmap = mesh->geometry().cmap();
     auto xdofmap = mesh->geometry().dofmap();
 
     // Geometry dofmap
@@ -40,7 +40,7 @@ compute_stiffness_geometry_triangle_GPU(std::shared_ptr<dolfinx::mesh::Mesh<T>> 
 
     // Evalute dphi at quadrature points
     std::array<std::size_t, 4> phi_shape = cmap.tabulate_shape(1, nq);
-    std::vector<T> phi_b(
+    std::vector<U> phi_b(
         std::reduce(phi_shape.begin(), phi_shape.end(), 1, std::multiplies{}));
     cmap.tabulate(1, points, {nq, gdim}, phi_b);
 
@@ -64,10 +64,10 @@ compute_stiffness_geometry_triangle_GPU(std::shared_ptr<dolfinx::mesh::Mesh<T>> 
 /// This runs on the GPU.
 /// @param[in] mesh The mesh object
 /// @param[in] points The quadrature points to compute Jacobian of the map
-template <typename T, int nq>
+template <typename T, typename U, int nq>
 std::span<T>
-compute_stiffness_geometry_tetrahedron_GPU(std::shared_ptr<dolfinx::mesh::Mesh<T>> mesh,
-                               std::vector<T> points, std::vector<T> weights,
+compute_stiffness_geometry_tetrahedron_GPU(std::shared_ptr<dolfinx::mesh::Mesh<U>> mesh,
+                               std::vector<U> points, std::vector<U> weights,
                                thrust::device_vector<T>& G_entity)
 {
     const std::size_t tdim = mesh->topology()->dim();
@@ -77,7 +77,7 @@ compute_stiffness_geometry_tetrahedron_GPU(std::shared_ptr<dolfinx::mesh::Mesh<T
     assert(weights.size() == nq);
     G_entity.resize(nc * 6 * nq);
 
-    const fem::CoordinateElement<T> &cmap = mesh->geometry().cmap();
+    const fem::CoordinateElement<U> &cmap = mesh->geometry().cmap();
     auto xdofmap = mesh->geometry().dofmap();
 
     // Geometry dofmap
@@ -94,7 +94,7 @@ compute_stiffness_geometry_tetrahedron_GPU(std::shared_ptr<dolfinx::mesh::Mesh<T
 
     // Evalute dphi at quadrature points
     std::array<std::size_t, 4> phi_shape = cmap.tabulate_shape(1, nq);
-    std::vector<T> phi_b(
+    std::vector<U> phi_b(
         std::reduce(phi_shape.begin(), phi_shape.end(), 1, std::multiplies{}));
     cmap.tabulate(1, points, {nq, gdim}, phi_b);
 

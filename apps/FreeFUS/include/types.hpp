@@ -61,25 +61,23 @@ template <typename T> struct PhysicalParameters {
                                  cfg.source_frequency) {}
 };
 
-template <typename T> struct MeshData {
-  std::shared_ptr<mesh::Mesh<T>> mesh;
+template <typename U>
+struct MeshData {
+  std::shared_ptr<mesh::Mesh<U>> mesh;
   std::shared_ptr<mesh::MeshTags<std::int32_t>> cell_tags;
   std::shared_ptr<mesh::MeshTags<std::int32_t>> facet_tags;
-
-  int tdim() const noexcept { return mesh->topology()->dim(); }
-  int gdim() const noexcept { return mesh->geometry()->dim(); }
 };
 
-template <typename T, int P, int Q, int D>
-using MassAction = std::conditional_t<D == 2, acc::MatFreeMassBaseline<T, P, Q>,
-                                      acc::MatFreeMassBaseline3D<T, P, Q>>;
+template <typename T, typename U, int P, int Q, int D>
+using MassAction = std::conditional_t<D == 2, acc::MatFreeMassBaseline<T, P, Q, U>,
+                                      acc::MatFreeMassBaseline3D<T, P, Q, U>>;
 
-template <typename T, int P, int Q, int D>
+template <typename T, typename U, int P, int Q, int D>
 using StiffnessAction =
-    std::conditional_t<D == 2, acc::MatFreeStiffness<T, P, Q>,
-                       acc::MatFreeStiffness3D<T, P, Q>>;
+    std::conditional_t<D == 2, acc::MatFreeStiffness<T, P, Q, U>,
+                       acc::MatFreeStiffness3D<T, P, Q, U>>;
 
-template <typename T, int P, int Q, int D>
+template <typename T, typename U, int P, int Q, int D>
 using ExteriorMassAction =
-    std::conditional_t<D == 2, acc::MatFreeMassExteriorBaseline<T, P, Q>,
-                       acc::MatFreeMassExteriorBaseline3D<T, P, Q>>;
+    std::conditional_t<D == 2, acc::MatFreeMassExteriorBaseline<T, P, Q, U>,
+                       acc::MatFreeMassExteriorBaseline3D<T, P, Q, U>>;

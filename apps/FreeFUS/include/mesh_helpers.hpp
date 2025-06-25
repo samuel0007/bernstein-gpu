@@ -6,13 +6,13 @@
 
 namespace freefus {
 
-template <typename T>
-MeshData<T> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
+template <typename U>
+MeshData<U> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
                       const std::string &mesh_filepath) {
-  auto coord_element = fem::CoordinateElement<T>(cell_type, 1);
+  auto coord_element = fem::CoordinateElement<double>(cell_type, 1);
 
   dolfinx::io::XDMFFile fmesh(comm, mesh_filepath, "r");
-  auto mesh_ptr = std::make_shared<mesh::Mesh<T>>(
+  auto mesh_ptr = std::make_shared<mesh::Mesh<double>>(
       fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
 
   const int tdim = mesh_ptr->topology()->dim();
@@ -26,34 +26,34 @@ MeshData<T> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
   assert(!cell_tags->indices().empty() && "No cell tags found");
   assert(!facet_tags->indices().empty() && "No facet tags found");
 
-  return MeshData<T>{mesh_ptr, cell_tags, facet_tags};
+  return MeshData{mesh_ptr, cell_tags, facet_tags};
 }
 
 // TODO: move to mainlib source
-template <typename T>
-T compute_global_min_cell_size(
-    const std::shared_ptr<dolfinx::mesh::Mesh<T>> &mesh_ptr) {
+template <typename U>
+U compute_global_min_cell_size(
+    const std::shared_ptr<dolfinx::mesh::Mesh<U>> &mesh_ptr) {
   int tdim = mesh_ptr->topology()->dim();
   const int N = mesh_ptr->topology()->index_map(tdim)->size_local();
   std::vector<int> cells(N);
   std::iota(cells.begin(), cells.end(), 0);
 
-  std::vector<T> h_local = dolfinx::mesh::h(*mesh_ptr, cells, tdim);
-  T min_local = *std::min_element(h_local.begin(), h_local.end());
+  std::vector<U> h_local = dolfinx::mesh::h(*mesh_ptr, cells, tdim);
+  U min_local = *std::min_element(h_local.begin(), h_local.end());
 
-  T min_global;
-  MPI_Allreduce(&min_local, &min_global, 1, dolfinx::MPI::mpi_t<T>, MPI_MIN,
+  U min_global;
+  MPI_Allreduce(&min_local, &min_global, 1, dolfinx::MPI::mpi_t<U>, MPI_MIN,
                 mesh_ptr->comm());
   spdlog::info("Global min mesh size: {}", min_global);
   return min_global;
 }
 
-template <typename T>
-T compute_global_minimum_sound_speed(MPI_Comm comm, auto material_coefficients) {
+template <typename U>
+U compute_global_minimum_sound_speed(MPI_Comm comm, auto material_coefficients) {
   auto &c0 = std::get<1>(material_coefficients);
-  T min_local = *std::min_element(c0->x()->array().begin(), c0->x()->array().end());
-  T min_global;
-  MPI_Allreduce(&min_local, &min_global, 1, dolfinx::MPI::mpi_t<T>, MPI_MIN,
+  U min_local = *std::min_element(c0->x()->array().begin(), c0->x()->array().end());
+  U min_global;
+  MPI_Allreduce(&min_local, &min_global, 1, dolfinx::MPI::mpi_t<U>, MPI_MIN,
                 comm);
   spdlog::info("Global min sound speed: {}", min_global);
   return min_global;

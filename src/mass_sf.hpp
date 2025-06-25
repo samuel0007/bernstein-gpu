@@ -165,8 +165,9 @@ public:
                                    qwts1.size() * sizeof(T)));
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     out.set(T{0.0});
+    in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -246,13 +247,13 @@ public:
     // std::vector<int> dof_reordering = {0, 4, 1, 3, 2, 6, 5, 9, 8, 7};
     // std::vector<int> dof_reordering = {0, 1, 2, 3};
     std::vector<int> dof_reordering = lex_dof_ordering(
-      basix::element::family::P, basix::cell::type::tetrahedron, P);
+        basix::element::family::P, basix::cell::type::tetrahedron, P);
     // std::vector<int> dof_reordering = {0, 1, 2, 3};
-    // std::vector<int> dof_reordering = {0, } 
+    // std::vector<int> dof_reordering = {0, }
     // std::reverse(dof_reordering.begin(), dof_reordering.end());
     // for(int i = 0; i < dof_reordering.size(); ++i) {
-      // dof_reordering[i] = i;
-      // std::cout << "i=" << dof_reordering[i] << "\n";
+    // dof_reordering[i] = i;
+    // std::cout << "i=" << dof_reordering[i] << "\n";
     // }
     assert(dof_reordering.size() == K);
 
@@ -393,8 +394,9 @@ public:
                                    qwts2.size() * sizeof(T)));
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     out.set(T{0.0});
+    in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();

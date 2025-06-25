@@ -10,30 +10,30 @@
 
 namespace dolfinx::acc {
 
-template <typename T, int P, int Q> class MatFreeMassBaseline {
+template <typename T, int P, int Q, typename U = T> class MatFreeMassBaseline {
 public:
   using value_type = T;
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
-  MatFreeMassBaseline(std::shared_ptr<mesh::Mesh<T>> mesh,
-                      std::shared_ptr<fem::FunctionSpace<T>> V, T alpha)
+  MatFreeMassBaseline(std::shared_ptr<mesh::Mesh<U>> mesh,
+                      std::shared_ptr<fem::FunctionSpace<U>> V, U alpha)
       : mesh(mesh), V(V) {
     auto dofmap = V->dofmap();
     auto map = dofmap->index_map;
     int map_bs = dofmap->index_map_bs();
-    la::Vector<T> alpha_vec(map, map_bs);
+    la::Vector<U> alpha_vec(map, map_bs);
     alpha_vec.set(alpha);
     init(alpha_vec.array());
   }
 
-  MatFreeMassBaseline(std::shared_ptr<mesh::Mesh<T>> mesh,
-                      std::shared_ptr<fem::FunctionSpace<T>> V,
-                      std::span<const T> alpha)
+  MatFreeMassBaseline(std::shared_ptr<mesh::Mesh<U>> mesh,
+                      std::shared_ptr<fem::FunctionSpace<U>> V,
+                      std::span<const U> alpha)
       : mesh(mesh), V(V) {
     init(alpha);
   }
 
-  void init(std::span<const T> alpha) {
+  void init(std::span<const U> alpha) {
     // auto [lcells, bcells] = compute_boundary_cells(V);
     // spdlog::debug("#lcells = {}, #bcells = {}", lcells.size(),
     // bcells.size());
@@ -68,7 +68,7 @@ public:
               << std::endl;
 
     // Construct quadrature points table
-    auto [qpts, qwts] = basix::quadrature::make_quadrature<T>(
+    auto [qpts, qwts] = basix::quadrature::make_quadrature<U>(
         basix::quadrature::type::Default, basix::cell::type::triangle,
         basix::polyset::type::standard, 2 * Q - 2);
 
@@ -85,14 +85,16 @@ public:
     this->phi_d_span =
         copy_to_device(phi_table.begin(), phi_table.end(), this->phi_d, "phi");
 
-    std::vector<T> detJ_geom = compute_geometry(mesh, qpts, qwts);
+    std::vector<U> detJ_geom = compute_geometry(mesh, qpts, qwts);
 
     this->detJ_geom_d_span = copy_to_device(detJ_geom.begin(), detJ_geom.end(),
                                             this->detJ_geom_d, "detJ_geom");
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     out.set(T{0.0});
+    in.scatter_fwd();
+
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -111,6 +113,7 @@ public:
   }
 
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+    diag_inv.set(0.);
     T *out_dofs = diag_inv.mutable_array().data();
 
     dim3 grid_size(this->number_of_local_cells);
@@ -136,8 +139,8 @@ private:
 
   std::size_t number_of_local_cells;
 
-  std::shared_ptr<mesh::Mesh<T>> mesh;
-  std::shared_ptr<fem::FunctionSpace<T>> V;
+  std::shared_ptr<mesh::Mesh<U>> mesh;
+  std::shared_ptr<fem::FunctionSpace<U>> V;
 
   thrust::device_vector<T> phi_d;
   std::span<const T> phi_d_span;
@@ -152,13 +155,14 @@ private:
   std::span<const std::int32_t> dofmap_d_span;
 };
 
-template <typename T, int P, int Q> class MatFreeMassBaseline3D {
+template <typename T, int P, int Q, typename U = T>
+class MatFreeMassBaseline3D {
 public:
   using value_type = T;
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
-  MatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<T>> mesh,
-                        std::shared_ptr<fem::FunctionSpace<T>> V, T alpha)
+  MatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                        std::shared_ptr<fem::FunctionSpace<U>> V, U alpha)
       : mesh(mesh), V(V) {
     auto dofmap = V->dofmap();
     auto map = dofmap->index_map;
@@ -168,14 +172,14 @@ public:
     init(alpha_vec.array());
   }
 
-  MatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<T>> mesh,
-                        std::shared_ptr<fem::FunctionSpace<T>> V,
-                        std::span<const T> alpha)
+  MatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                        std::shared_ptr<fem::FunctionSpace<U>> V,
+                        std::span<const U> alpha)
       : mesh(mesh), V(V) {
     init(alpha);
   }
 
-  void init(std::span<const T> alpha) {
+  void init(std::span<const U> alpha) {
     // auto [lcells, bcells] = compute_boundary_cells(V);
     // spdlog::debug("#lcells = {}, #bcells = {}", lcells.size(),
     // bcells.size());
@@ -202,7 +206,7 @@ public:
     //     basix::quadrature::type::gauss_jacobi,
     //     basix::cell::type::tetrahedron, basix::polyset::type::standard, 2 * Q
     //     - 2);
-    auto [qpts, qwts] = basix::quadrature::make_quadrature<T>(
+    auto [qpts, qwts] = basix::quadrature::make_quadrature<U>(
         basix::quadrature::type::Default, basix::cell::type::tetrahedron,
         basix::polyset::type::standard, 2 * Q - 2);
 
@@ -218,14 +222,15 @@ public:
     this->phi_d_span =
         copy_to_device(phi_table.begin(), phi_table.end(), this->phi_d, "phi");
     std::cout << "Precomputing geometry..." << std::endl;
-    std::vector<T> detJ_geom = compute_geometry(mesh, qpts, qwts);
+    std::vector<U> detJ_geom = compute_geometry(mesh, qpts, qwts);
 
     this->detJ_geom_d_span = copy_to_device(detJ_geom.begin(), detJ_geom.end(),
                                             this->detJ_geom_d, "detJ_geom");
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     out.set(T{0.0});
+    in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -270,8 +275,8 @@ private:
                             1331 * (Q == 11);
   std::size_t number_of_local_cells;
 
-  std::shared_ptr<mesh::Mesh<T>> mesh;
-  std::shared_ptr<fem::FunctionSpace<T>> V;
+  std::shared_ptr<mesh::Mesh<U>> mesh;
+  std::shared_ptr<fem::FunctionSpace<U>> V;
 
   thrust::device_vector<T> phi_d;
   std::span<const T> phi_d_span;
@@ -286,15 +291,16 @@ private:
   std::span<const std::int32_t> dofmap_d_span;
 };
 
-template <typename T, int P, int Q> class MatFreeMassExteriorBaseline {
+template <typename T, int P, int Q, typename U = T>
+class MatFreeMassExteriorBaseline {
 public:
   using value_type = T;
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
-  MatFreeMassExteriorBaseline(std::shared_ptr<mesh::Mesh<T>> mesh,
-                              std::shared_ptr<fem::FunctionSpace<T>> V,
+  MatFreeMassExteriorBaseline(std::shared_ptr<mesh::Mesh<U>> mesh,
+                              std::shared_ptr<fem::FunctionSpace<U>> V,
                               std::span<const std::int32_t> cell_facet_data,
-                              T alpha)
+                              U alpha)
       : mesh(mesh), V(V) {
     auto dofmap = V->dofmap();
     auto map = dofmap->index_map;
@@ -304,16 +310,16 @@ public:
     init(cell_facet_data, alpha_vec.array());
   }
 
-  MatFreeMassExteriorBaseline(std::shared_ptr<mesh::Mesh<T>> mesh,
-                              std::shared_ptr<fem::FunctionSpace<T>> V,
+  MatFreeMassExteriorBaseline(std::shared_ptr<mesh::Mesh<U>> mesh,
+                              std::shared_ptr<fem::FunctionSpace<U>> V,
                               std::span<const std::int32_t> cell_facet_data,
-                              std::span<const T> alpha)
+                              std::span<const U> alpha)
       : mesh(mesh), V(V) {
     init(cell_facet_data, alpha);
   }
 
   void init(std::span<const std::int32_t> cell_facet_data,
-            std::span<const T> alpha) {
+            std::span<const U> alpha) {
     // auto [lcells, bcells] = compute_boundary_cells(V);
     // spdlog::debug("#lcells = {}, #bcells = {}", lcells.size(),
     // bcells.size());
@@ -342,7 +348,7 @@ public:
                        cell_facet_d, "cell facet data");
 
     // Construct quadrature points table on interval
-    auto [qpts, qwts] = basix::quadrature::make_quadrature<T>(
+    auto [qpts, qwts] = basix::quadrature::make_quadrature<U>(
         basix::quadrature::type::Default, basix::cell::type::interval,
         basix::polyset::type::standard, 2 * Q - 2);
 
@@ -351,10 +357,10 @@ public:
     mesh::CellType cell_type = mesh->topology()->cell_type();
     this->n_faces = mesh::cell_num_entities(cell_type, tdim - 1);
 
-    std::vector<T> facets_phi_table(n_faces * Q * K);
+    std::vector<U> facets_phi_table(n_faces * Q * K);
     for (int i = 0; i < n_faces; ++i) {
       // 1. Get mapped points on physical reference facet: tdim - 1 -> tdim
-      std::vector<T> mapped_points = map_facet_points(qpts, i, cell_type);
+      std::vector<U> mapped_points = map_facet_points(qpts, i, cell_type);
       assert(mapped_points.size() / tdim == qpts.size() / (tdim - 1));
 
       // 2. Evaluate basis functions at mapped points
@@ -378,7 +384,7 @@ public:
                        facets_phi_d, "facets phi");
 
     // Precompute geometry data
-    std::vector<T> detJ_geom =
+    std::vector<U> detJ_geom =
         compute_geometry_facets(mesh, cell_facet_data, qpts, qwts);
     assert(detJ_geom.size() == this->number_of_local_cells * n_faces * nq);
 
@@ -396,8 +402,9 @@ public:
                        "local face index to local closure dofs");
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     // out.set(T{0.0});
+    in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -443,8 +450,8 @@ private:
   std::size_t number_of_local_facets;
   std::size_t number_of_local_cells;
 
-  std::shared_ptr<mesh::Mesh<T>> mesh;
-  std::shared_ptr<fem::FunctionSpace<T>> V;
+  std::shared_ptr<mesh::Mesh<U>> mesh;
+  std::shared_ptr<fem::FunctionSpace<U>> V;
 
   thrust::device_vector<T> facets_phi_d;
   std::span<const T> facets_phi_d_span;
@@ -466,15 +473,16 @@ private:
   std::span<const std::int32_t> dofmap_d_span;
 };
 
-template <typename T, int P, int Q> class MatFreeMassExteriorBaseline3D {
+template <typename T, int P, int Q, typename U = T>
+class MatFreeMassExteriorBaseline3D {
 public:
   using value_type = T;
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
-  MatFreeMassExteriorBaseline3D(std::shared_ptr<mesh::Mesh<T>> mesh,
-                                std::shared_ptr<fem::FunctionSpace<T>> V,
+  MatFreeMassExteriorBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                                std::shared_ptr<fem::FunctionSpace<U>> V,
                                 std::span<const std::int32_t> cell_facet_data,
-                                T alpha)
+                                U alpha)
       : mesh(mesh), V(V) {
     auto dofmap = V->dofmap();
     auto map = dofmap->index_map;
@@ -484,16 +492,16 @@ public:
     init(cell_facet_data, alpha_vec.array());
   }
 
-  MatFreeMassExteriorBaseline3D(std::shared_ptr<mesh::Mesh<T>> mesh,
-                                std::shared_ptr<fem::FunctionSpace<T>> V,
+  MatFreeMassExteriorBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                                std::shared_ptr<fem::FunctionSpace<U>> V,
                                 std::span<const std::int32_t> cell_facet_data,
-                                std::span<const T> alpha)
+                                std::span<const U> alpha)
       : mesh(mesh), V(V) {
     init(cell_facet_data, alpha);
   }
 
   void init(std::span<const std::int32_t> cell_facet_data,
-            std::span<const T> alpha) {
+            std::span<const U> alpha) {
     // auto [lcells, bcells] = compute_boundary_cells(V);
     // spdlog::debug("#lcells = {}, #bcells = {}", lcells.size(),
     // bcells.size());
@@ -505,13 +513,13 @@ public:
         mesh->topology()->index_map(tdim)->num_ghosts();
     assert(cell_facet_data.size() % 2 == 0);
     this->number_of_local_facets = cell_facet_data.size() / 2;
-    std::cout << "Exterior Mass local facets: " << this->number_of_local_facets << std::endl;
-
+    std::cout << "Exterior Mass local facets: " << this->number_of_local_facets
+              << std::endl;
 
     // TODO: one could be smart, and pack the necessary exterior data instead of
     // sending everything. Transfer V dofmap to the GPU Or just use the same
-    // pointer as for the normal mass matrix? Like passing the exterior dofmap as
-    // argument
+    // pointer as for the normal mass matrix? Like passing the exterior dofmap
+    // as argument
     auto dofmap = V->dofmap();
 
     dofmap_d_span = copy_to_device(
@@ -525,7 +533,7 @@ public:
                        cell_facet_d, "cell facet data");
 
     // Construct quadrature points table on interval
-    auto [qpts, qwts] = basix::quadrature::make_quadrature<T>(
+    auto [qpts, qwts] = basix::quadrature::make_quadrature<U>(
         basix::quadrature::type::Default, basix::cell::type::triangle,
         basix::polyset::type::standard, 2 * Q - 2);
 
@@ -534,10 +542,10 @@ public:
     mesh::CellType cell_type = mesh->topology()->cell_type();
     this->n_faces = mesh::cell_num_entities(cell_type, tdim - 1);
 
-    std::vector<T> facets_phi_table(n_faces * nq * nd);
+    std::vector<U> facets_phi_table(n_faces * nq * nd);
     for (int i = 0; i < n_faces; ++i) {
       // 1. Get mapped points on physical reference facet: tdim - 1 -> tdim
-      std::vector<T> mapped_points = map_facet_points(qpts, i, cell_type);
+      std::vector<U> mapped_points = map_facet_points(qpts, i, cell_type);
       assert(mapped_points.size() / tdim == qpts.size() / (tdim - 1));
 
       // 2. Evaluate basis functions at mapped points
@@ -561,7 +569,7 @@ public:
                        facets_phi_d, "facets phi");
 
     // Precompute geometry data
-    std::vector<T> detJ_geom =
+    std::vector<U> detJ_geom =
         compute_geometry_facets(mesh, cell_facet_data, qpts, qwts);
     assert(detJ_geom.size() == this->number_of_local_cells * n_faces * nq);
 
@@ -579,8 +587,9 @@ public:
     //                    "local face index to local closure dofs");
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     // out.set(T{0.0});
+    in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -629,8 +638,8 @@ private:
   std::size_t number_of_local_facets;
   std::size_t number_of_local_cells;
 
-  std::shared_ptr<mesh::Mesh<T>> mesh;
-  std::shared_ptr<fem::FunctionSpace<T>> V;
+  std::shared_ptr<mesh::Mesh<U>> mesh;
+  std::shared_ptr<fem::FunctionSpace<U>> V;
 
   thrust::device_vector<T> facets_phi_d;
   std::span<const T> facets_phi_d_span;

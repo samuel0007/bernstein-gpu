@@ -27,15 +27,15 @@ std::vector<Material<T>> getMaterialsData(MaterialCase material_case) {
 };
 } // namespace materials
 
-template <typename T>
-auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<T>> V_DG,
-                                   const MeshData<T> mesh_data,
+template <typename U>
+auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
+                                   const MeshData<U> mesh_data,
                                    MaterialCase material_case) {
 
-  std::vector<materials::Material<T>> materials_data =
-      materials::getMaterialsData<T>(material_case);
-  auto c0 = std::make_shared<fem::Function<T>>(V_DG);
-  auto rho0 = std::make_shared<fem::Function<T>>(V_DG);
+  std::vector<materials::Material<U>> materials_data =
+      materials::getMaterialsData<U>(material_case);
+  auto c0 = std::make_shared<fem::Function<U>>(V_DG);
+  auto rho0 = std::make_shared<fem::Function<U>>(V_DG);
 
   for (auto material : materials_data) {
     auto cells = mesh_data.cell_tags->find(material.domain_id);
@@ -43,11 +43,11 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<T>> V_DG,
         "Material domain id {}, sounds speed {}, density {}, #cells {}",
         material.domain_id, material.sound_speed, material.density,
         cells.size());
-    std::span<T> c0_ = c0->x()->mutable_array();
+    std::span<U> c0_ = c0->x()->mutable_array();
     std::for_each(cells.begin(), cells.end(),
                   [&](std::int32_t &i) { c0_[i] = material.sound_speed; });
 
-    std::span<T> rho0_ = rho0->x()->mutable_array();
+    std::span<U> rho0_ = rho0->x()->mutable_array();
     std::for_each(cells.begin(), cells.end(),
                   [&](std::int32_t &i) { rho0_[i] = material.density; });
   }

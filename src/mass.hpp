@@ -105,8 +105,9 @@ public:
                                    dof_reordering.size() * sizeof(int)));
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     out.set(T{0.0});
+    in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -181,11 +182,11 @@ public:
         basix::element::family::P, basix::cell::type::tetrahedron, P);
     // std::vector<int> dof_reordering = {0, 1, 2, 3};
     // std::reverse(dof_reordering.begin(), dof_reordering.end());
-    for(int i = 0; i < dof_reordering.size(); ++i) {
+    for (int i = 0; i < dof_reordering.size(); ++i) {
       // std::cout << "i=" << dof_reordering[i] << "\n";
     }
     assert(dof_reordering.size() == K);
-    
+
     const std::size_t tdim = mesh->topology()->dim();
     const std::size_t gdim = mesh->geometry().dim();
     this->number_of_local_cells =
@@ -257,8 +258,9 @@ public:
                                    dof_reordering.size() * sizeof(int)));
   }
 
-  template <typename Vector> void operator()(const Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
     out.set(T{0.0});
+    in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
