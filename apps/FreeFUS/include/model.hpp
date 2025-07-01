@@ -79,15 +79,56 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
                   const PhysicalParameters<U> &params, ModelType model_type) {
 
   std::vector<std::vector<std::int32_t>> facet_domains;
-  std::vector<int> ft_unique = {1, 2};
-  for (int i = 0; i < ft_unique.size(); ++i) {
-    int tag = ft_unique[i];
-    std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
+  // std::vector<int> ft_unique = {1, 2};
+  // for (int i = 0; i < ft_unique.size(); ++i) {
+  //   int tag = ft_unique[i];
+  //   std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
+  //       fem::IntegralType::exterior_facet,
+  //       *(mesh_data.mesh->topology_mutable()), mesh_data.facet_tags->find(tag));
+  //   std::cout << std::format("Domain {}: {}\n", tag, facet_domain.size() / 2);
+  //   facet_domains.push_back(facet_domain);
+  // }
+    
+  // TODO
+   std::vector<std::int32_t> facets1 = mesh::locate_entities_boundary(
+        *mesh_data.mesh, 2,
+    [](auto x)
+    {
+      std::vector<std::int8_t> marker(x.extent(1), false);
+      for (std::size_t p = 0; p < x.extent(1); ++p)
+      {
+        auto x0 = x(2, p);
+        if (x0 > -0.002)
+          marker[p] = true;
+      }
+      return marker;
+    });
+  
+   std::vector<std::int32_t> facets2 = mesh::locate_entities_boundary(
+        *mesh_data.mesh, 2,
+    [](auto x)
+    {
+      std::vector<std::int8_t> marker(x.extent(1), false);
+      for (std::size_t p = 0; p < x.extent(1); ++p)
+      {
+        auto x0 = x(2, p);
+        if (x0 <= -0.002)
+          marker[p] = true;
+      }
+      return marker;
+    });
+
+  std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
         fem::IntegralType::exterior_facet,
-        *(mesh_data.mesh->topology_mutable()), mesh_data.facet_tags->find(tag));
-    std::cout << std::format("Domain {}: {}\n", tag, facet_domain.size() / 2);
+        *(mesh_data.mesh->topology_mutable()), facets1);
+    std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
     facet_domains.push_back(facet_domain);
-  }
+
+  facet_domain = fem::compute_integration_domains(
+        fem::IntegralType::exterior_facet,
+        *(mesh_data.mesh->topology_mutable()), facets2);
+    std::cout << std::format("Domain {}: {}\n", 2, facet_domain.size() / 2);
+    facet_domains.push_back(facet_domain);
 
   auto [rho0, c0] = material_coefficients;
 

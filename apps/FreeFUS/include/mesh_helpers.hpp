@@ -26,7 +26,7 @@ MeshData<U> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
       fmesh.read_meshtags(*mesh_ptr, "Cell tags", std::nullopt));
   auto facet_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
       fmesh.read_meshtags(*mesh_ptr, "Facet tags", std::nullopt));
-
+  
   // assert(!cell_tags->indices().empty() && "No cell tags found");
   assert(!facet_tags->indices().empty() && "No facet tags found");
 

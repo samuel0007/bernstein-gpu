@@ -89,9 +89,9 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
       ("domain-length", po::value<T>()->default_value(0.12), "Domain length (m)")
       ("window-length", po::value<T>()->default_value(4), "Window length (periods)")
-      ("output-steps", po::value<int>()->default_value(50), "Number of I/O output steps")
+      ("output-steps", po::value<int>()->default_value(200), "Number of I/O output steps")
       ("insitu", po::value<bool>()->default_value(true), "Insitu visualisation")
-      ("insitu-output-steps", po::value<int>()->default_value(200), "Number of insitu output steps")
+      ("insitu-output-steps", po::value<int>()->default_value(50), "Number of insitu output steps")
       ("cg-tol", po::value<T>()->default_value(1e-8), "Tolerance of CG solver")
       ("cg-maxsteps", po::value<int>()->default_value(200), "Max number of CG iterations")
       ("log-level", po::value<std::string>()->default_value("info"),
