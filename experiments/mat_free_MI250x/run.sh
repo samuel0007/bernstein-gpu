@@ -21,6 +21,6 @@ for s in float32 float64; do
         cmake .. -Dscalar_type=$s -Dpolynomial_degree=$p -Dnvidia=Off -Damd=On -DCMAKE_CXX_FLAGS="-I${MPICH_DIR}/include"   -DCMAKE_EXE_LINKER_FLAGS="-L${MPICH_DIR}/lib -lmpi ${PE_MPICH_GTL_DIR_amd_gfx90a} ${PE_MPICH_GTL_LIBS_amd_gfx90a}"
         make mat_free_mass
         cd ..
-	mpirun -n 1 build/mat_free_mass --nreps 500 --nelements $nelements 2>&1 | tee experiments/$EXPERIMENT/log_${s}_$p.txt
+	srun --ntasks=1 build/mat_free_mass --nreps 500 --nelements $nelements 2>&1 | tee experiments/$EXPERIMENT/log_${s}_$p.txt
     done
 done

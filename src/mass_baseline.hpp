@@ -411,14 +411,16 @@ public:
 
     assert(in.array().size() == out.mutable_array().size());
 
-    dim3 grid_size(this->number_of_local_facets);
-    dim3 block_size(nd);
-    facets_mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
-        in_dofs, out_dofs, this->cell_facet_d_span.data(),
-        this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
-        this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
-        this->faces_dofs_d_span.data(), this->n_faces);
-    check_device_last_error();
+    if(this->number_of_local_facets != 0) {
+      dim3 grid_size(this->number_of_local_facets);
+      dim3 block_size(nd);
+      facets_mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
+          in_dofs, out_dofs, this->cell_facet_d_span.data(),
+          this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
+          this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
+          this->faces_dofs_d_span.data(), this->n_faces);
+      check_device_last_error();
+    }
   }
 
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
@@ -595,15 +597,16 @@ public:
     T *out_dofs = out.mutable_array().data();
 
     assert(in.array().size() == out.mutable_array().size());
-
-    dim3 grid_size(this->number_of_local_facets);
-    dim3 block_size(max(nq, nd));
-    facets_mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
-        in_dofs, out_dofs, this->cell_facet_d_span.data(),
-        this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
-        this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
-        this->faces_dofs_d_span.data(), this->n_faces);
-    check_device_last_error();
+    if(this->number_of_local_facets != 0) {
+      dim3 grid_size(this->number_of_local_facets);
+      dim3 block_size(max(nq, nd));
+      facets_mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
+          in_dofs, out_dofs, this->cell_facet_d_span.data(),
+          this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
+          this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
+          this->faces_dofs_d_span.data(), this->n_faces);
+      check_device_last_error();
+    }
   }
 
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {

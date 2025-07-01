@@ -65,13 +65,13 @@ public:
   }
 
 private:
-  U source_sound_speed;
   static constexpr std::array<U, 4> a = {0.0, 0.5, 0.5, 1.0};
-  static constexpr std::array<U, 4> b = {1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0,
-                                         1.0 / 6.0};
+  static constexpr std::array<U, 4> b = {1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0};
   static constexpr std::array<U, 4> c = {0.0, 0.5, 0.5, 1.0};
-
+  
   PhysicalParameters<U> params;
+  U source_sound_speed;
+
   std::unique_ptr<Vector> g;
   std::unique_ptr<Vector> RHS;
 
@@ -128,6 +128,7 @@ U compute_dt(std::shared_ptr<fem::Function<U>> solution, U h, U sound_speed,
 }
 
 template <typename U, int P> U compute_dt(U h, U sound_speed, U period, U CFL) {
+  std::cout << "DT" << P << " " <<  h << " " << sound_speed << " " << CFL << " " <<period<< std::endl;
   U dt = CFL * h / (sound_speed * P * P);
   const int steps_per_period = period / dt + 1;
   return period / steps_per_period;
@@ -144,7 +145,7 @@ void log_progress(int steps, U dt, U current_time, U final_time,
   U elapsed = std::chrono::duration<U>(now - start).count();
   U eta = (fraction > 0.0) ? elapsed * (1.0 - fraction) / fraction : 0.0;
 
-  spdlog::info("Step {:4d} — dt = {:7.4f}s — t = {:7.4f}/{:7.4f} ({:5.1f}%) "
+  spdlog::info("Step {:4d} — dt = {:10.6e}s — t = {:10.6e}/{:7.4f} ({:5.1f}%) "
                "— elapsed {:6.2f}s — ETA {:6.2f}s",
                steps, double(dt), double(current_time), double(final_time),
                fraction * 100.0, elapsed, eta);

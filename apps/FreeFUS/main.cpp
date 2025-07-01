@@ -1,7 +1,9 @@
-#include "util.hpp"
-#include "vector.hpp"
 #include <mpi.h>
 #include <spdlog/spdlog.h>
+#include <dolfinx.h>
+
+#include "util.hpp"
+#include "vector.hpp"
 
 #include "ascent_helpers.hpp"
 #include "cli.hpp"
@@ -46,8 +48,8 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
   auto [V_out, u_out] =
       freefus::make_output_spaces(mesh_data.mesh, cell_type, P);
 
-  io::VTXWriter<U> fwriter(mesh_data.mesh->comm(), config.output_filepath,
-                           {u_out}, "bp5");
+  // io::VTXWriter<U> fwriter(mesh_data.mesh->comm(), config.output_filepath,
+  //                          {u_out}, "bp5");
 
   ascent::Ascent ascent_runner;
   conduit::Node conduit_mesh;
@@ -76,20 +78,21 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
 
   T max_dt = freefus::compute_dt<T, P>(h_min, sound_speed_min, params.period,
                                        config.CFL);
+
   while (current_time < final_time) {
     // This might be needed for nonlinear case
     // T max_dt = freefus::compute_dt<T, P>(solution, h_min, sound_speed_min,
     //                                      params.period, config.CFL);
-    T dt = min(max_dt, final_time - current_time);
+    T dt = std::min(max_dt, final_time - current_time);
     timestepper->evolve(model, solver, current_time, dt);
 
-    if (!(steps % config.output_steps)) {
-      timestepper->get_solution(solution);
-      u_out->interpolate(*solution);
-      fwriter.write(current_time);
-      spdlog::info("File output: wrote solution at time {} (step {})",
-                   current_time, steps);
-    }
+    // if (!(steps % config.output_steps)) {
+    //   timestepper->get_solution(solution);
+    //   u_out->interpolate(*solution);
+    //   fwriter.write(current_time);
+    //   spdlog::info("File output: wrote solution at time {} (step {})",
+    //                current_time, steps);
+    // }
 
     if (config.insitu && !(steps % config.insitu_output_steps)) {
       timestepper->get_solution(solution);
@@ -103,6 +106,7 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
 
     ++steps;
     current_time += dt;
+    // break;
     if (!(steps % 10)) {
       freefus::log_progress(steps, dt, current_time, final_time, start);
     }
@@ -110,7 +114,7 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
 
   timestepper->get_solution(solution);
   u_out->interpolate(*solution);
-  fwriter.write(current_time);
+  // fwriter.write(current_time);
   spdlog::info("File output: wrote solution at time {} (step {})",
                 current_time, steps);
 

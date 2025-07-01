@@ -11,7 +11,10 @@ set(CMAKE_CUDA_HOST_COMPILER "${CMAKE_CXX_COMPILER}")
 
 find_package(Ascent REQUIRED
              NO_DEFAULT_PATH
-             PATHS /home/sr2120/ascent/scripts/build_ascent/install/ascent-checkout)
+             PATHS /home/sr2120/ascent/scripts/build_ascent/install/ascent-checkout
+                    /pfs/lustrep1/scratch/project_465001872/russosam/ascent/scripts/build_ascent/install/ascent-checkout)
+
+# set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -g -O0")
 
 add_executable(${PROJECT_NAME}
   main.cpp
@@ -39,7 +42,7 @@ target_include_directories(${PROJECT_NAME}
 # )
 
 link_common(${PROJECT_NAME} main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent)
+target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent_mpi)
 
 
 target_compile_definitions(${PROJECT_NAME}

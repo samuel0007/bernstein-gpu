@@ -1,0 +1,41 @@
+Num devices: 1
+Device: AMD Instinct MI250X/gfx90a:sramecc+:xnack-: 9.0
+  Global memory:   65520 Mb
+  Shared memory:   64 kb
+  Constant memory: 2047 Mb
+  Block registers: 65536
+
+  Warp size:         64
+  Threads per block: 1024
+  Max block dimensions: [ 1024, 1024, 1024 ]
+  Max grid dimensions:  [ 2147483647, 65536, 65536 ]
+-----------------------------------
+Polynomial degree: 4
+Number of quadrature points (1D): 6
+Number of dofs per element: 15
+Number of cells-global: 131072
+Number of dofs-global: 1050625
+Number of dofs-local: 1050625
+Number of repetitions: 500
+Scalar Type: float32
+-----------------------------------
+Sent dofmap to GPU (size = 7864320 bytes)
+Sent alpha to GPU (size = 524288 bytes)
+phi_1 size = 30, qxn: 6x5
+phi_0_N size = 150, nxqxn: 5x6x5
+Send geometry to GPU (size = 18874368 bytes)
+Sent dofmap to GPU (size = 7864320 bytes)
+Sent alpha to GPU (size = 524288 bytes)
+Send geometry to GPU (size = 18874368 bytes)
+Sent dofmap to GPU (size = 7864320 bytes)
+Sent alpha to GPU (size = 524288 bytes)
+Table size = 375, qxn: 25x15
+Send geometry to GPU (size = 13107200 bytes)
+norm(x_d)=535.238
+Baseline Mat-free Matvec time: 0.264329
+Baseline Mat-free action Gdofs/s: 1.98734
+SF Mat-free Matvec time: 0.192457
+SF Mat-free action Gdofs/s: 2.72951
+SF OTF Mat-free Matvec time: 0.689874
+SF OTF Mat-free action Gdofs/s: 0.761462
+norm(y_d)=0.000299673

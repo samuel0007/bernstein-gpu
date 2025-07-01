@@ -18,10 +18,10 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
   // Data is passed by reference
   ascent_h::FunctionToBlueprintField(solution, conduit_mesh, field_name);
 
-  // Node ascent_opts;
-  // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
-  // ascent_runner.open(ascent_opts);
-  ascent_runner.open();
+  conduit::Node ascent_opts;
+  ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
+  ascent_runner.open(ascent_opts);
+  // ascent_runner.open();
 
   conduit::Node scenes;
   if (tdim == 3) {
@@ -117,6 +117,7 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
   } else {
     scenes["s1/plots/p1/type"] = "pseudocolor";
     scenes["s1/plots/p1/field"] = field_name;
+    // scenes["s1/plots/p2/type"] = "mesh";
     scenes["s1/renders/r1/camera/azimuth"] = 0.0;
     scenes["s1/renders/r1/image_prefix"] = "r1";
   }

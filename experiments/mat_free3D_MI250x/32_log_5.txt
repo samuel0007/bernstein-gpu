@@ -1,0 +1,43 @@
+Num devices: 1
+Device: AMD Instinct MI250X/gfx90a:sramecc+:xnack-: 9.0
+  Global memory:   65520 Mb
+  Shared memory:   64 kb
+  Constant memory: 2047 Mb
+  Block registers: 65536
+
+  Warp size:         64
+  Threads per block: 1024
+  Max block dimensions: [ 1024, 1024, 1024 ]
+  Max grid dimensions:  [ 2147483647, 65536, 65536 ]
+-----------------------------------
+Polynomial degree: 5
+Number of quadrature points (1D): 6
+Number of dofs per element: 168
+Number of cells-global: 6000
+Number of dofs-global: 132651
+Number of dofs-local: 132651
+Number of repetitions: 500
+Scalar Type: float32
+-----------------------------------
+Sent dofmap to GPU (size = 1344000 bytes)
+Sent alpha to GPU (size = 24000 bytes)
+start computing geometry...
+finished computing geometry.
+Send geometry to GPU (size = 5184000 bytes)
+Sent dofmap to GPU (size = 1344000 bytes)
+Sent alpha to GPU (size = 24000 bytes)
+phi_2 size = 36, qxn: 6x6
+phi_1_N size = 216, nxqxn: 6x6x6
+phi_0_N size = 216, nxqxn: 6x6x6
+Send geometry to GPU (size = 5184000 bytes)
+Sent dofmap to GPU (size = 1344000 bytes)
+Sent alpha to GPU (size = 24000 bytes)
+Table size = 4144, qxn: 74x56
+Precomputing geometry
+Send geometry to GPU (size = 1776000 bytes)
+norm(x_d)=190.185
+Baseline Mat-free Matvec time: 0.112556
+Baseline Mat-free action Gdofs/s: 0.589266
+Memory access fault by GPU node-4 (Agent handle: 0xd02ac0) on address 0x153a68642000. Reason: Unknown.
+srun: error: nid007972: task 0: Aborted
+srun: Terminating StepId=11161435.3
