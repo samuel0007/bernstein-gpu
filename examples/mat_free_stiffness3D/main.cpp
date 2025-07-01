@@ -70,13 +70,17 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
-  auto mesh = std::make_shared<mesh::Mesh<T>>(mesh::create_box<T>(
-      comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}}, {nelements, nelements,
-      nelements}, mesh::CellType::tetrahedron,
-      mesh::create_cell_partitioner(mesh::GhostMode::none)));
+  // auto mesh = std::make_shared<mesh::Mesh<T>>(mesh::create_box<T>(
+  //     comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}}, {nelements, nelements,
+  //     nelements}, mesh::CellType::tetrahedron,
+  //     mesh::create_cell_partitioner(mesh::GhostMode::none)));
+  auto coord_element = fem::CoordinateElement<T>(mesh::CellType::tetrahedron, 1);
+  io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf", "r");
+  auto mesh = std::make_shared<mesh::Mesh<T>>(fmesh.read_mesh(
+      coord_element, mesh::GhostMode::none, "mesh"));
   auto element = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::tetrahedron,
-      polynomial_degree, basix::element::lagrange_variant::equispaced,
+      polynomial_degree, basix::element::lagrange_variant::bernstein,
       basix::element::dpc_variant::unset, false);
 
   auto element_DG = basix::create_element<T>(
@@ -91,15 +95,15 @@ void solver(MPI_Comm comm, po::variables_map vm) {
       mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
 
   auto alpha = std::make_shared<fem::Function<T>>(V_DG);
-  // alpha->interpolate(
-  //     [](auto x) -> std::pair<std::vector<T>, std::vector<std::size_t>> {
-  //       std::vector<T> out;
-  //       for (std::size_t p = 0; p < x.extent(1); ++p) {
-  //         out.push_back(x(1, p));
-  //       }
-  //       return {out, {out.size()}};
-  //     });
-  alpha->x()->set(1.);
+  alpha->interpolate(
+      [](auto x) -> std::pair<std::vector<T>, std::vector<std::size_t>> {
+        std::vector<T> out;
+        for (std::size_t p = 0; p < x.extent(1); ++p) {
+          out.push_back(x(1, p));
+        }
+        return {out, {out.size()}};
+      });
+  // alpha->x()->set(1.);
 
   std::shared_ptr<mesh::Topology> topology = mesh->topology();
   const std::size_t tdim = topology->dim();
@@ -240,14 +244,14 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::cout << "norm(x)=" << la::norm(x) << "\n";
     cpu_action(x, y);
     std::cout << "norm(y)=" << la::norm(y) << "\n";
-    double eps = 1e-6;
+    double eps = 1e-15;
     bool check = true;
     for (int i = 0; i < ndofs_local; ++i) {
       if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
-        std::cout << std::format("y={}, y_h={}\n", y.array()[i],
-                                 y_h.array()[i]);
+        // std::cout << std::format("y={}, y_h={}\n", y.array()[i],
+        //                          y_h.array()[i]);
         check = false;
-        // break;
+        break;
       }
     }
     std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;

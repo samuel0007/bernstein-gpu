@@ -22,7 +22,7 @@ coord_element = element("Lagrange", "tetrahedron", 1, shape=(3,))
 mesh = Mesh(coord_element)
 
 # Function Space
-e = element("Lagrange", "tetrahedron", P, lagrange_variant=LagrangeVariant.equispaced)
+e = element("Lagrange", "tetrahedron", P, lagrange_variant=LagrangeVariant.bernstein)
 e_DG = element("Lagrange", "tetrahedron", 0, discontinuous=True)
 
 V = FunctionSpace(mesh, e)
