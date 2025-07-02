@@ -73,6 +73,90 @@ private:
   std::unique_ptr<ExteriorMassAction> exterior_mass_action2_ptr;
 };
 
+template <typename T, typename U, int P, int Q, int D, double beta = 0.25, double gamma = 0.5> class LinearImplicit {
+  using Func_ptr = std::shared_ptr<fem::Function<U>>;
+  using MassAction = MassAction<T, U, P, Q, D>;
+  using StiffnessAction = StiffnessAction<T, U, P, Q, D>;
+  using ExteriorMassAction = ExteriorMassAction<T, U, P, Q, D>;
+
+public:
+  /// @brief TODO this is not very dry. We could split "operator provider" and simply a Model 
+  /// which combines these operators (and calls somt like operator_provider.init())
+  /// @param spaces 
+  /// @param mesh 
+  /// @param rho0 
+  /// @param c0 
+  /// @param facet_domains 
+  LinearImplicit(auto spaces, std::shared_ptr<mesh::Mesh<U>> mesh,
+                 Func_ptr rho0, Func_ptr c0,
+                 std::vector<std::vector<std::int32_t>> facet_domains) {
+    auto [el, el_DG, V, V_DG] = spaces;
+
+    std::span<U> c0_ = c0->x()->mutable_array();
+    std::span<U> rho0_ = rho0->x()->mutable_array();
+    const int ncells = c0_.size();
+
+    std::vector<U> alpha_mass(ncells);
+    std::vector<U> alpha_stiffness(ncells);
+    std::vector<U> alpha_exterior1(ncells);
+    std::vector<U> alpha_exterior2(ncells);
+
+    for (std::size_t i = 0; i < ncells; ++i) {
+      alpha_mass[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]);
+      alpha_stiffness[i] = -1. / rho0_[i];
+      alpha_exterior1[i] = 1. / rho0_[i];
+      alpha_exterior2[i] = -1. / (rho0_[i] * c0_[i]);
+    }
+    mass_action_ptr =
+        std::make_unique<MassAction>(mesh, V, alpha_mass);
+    stiffness_action_ptr = std::make_unique<StiffnessAction>(
+        mesh, V, alpha_stiffness);
+
+    exterior_mass_action1_ptr = std::make_unique<ExteriorMassAction>(
+        mesh, V, facet_domains[0], alpha_exterior1);
+    exterior_mass_action2_ptr = std::make_unique<ExteriorMassAction>(
+        mesh, V, facet_domains[1], alpha_exterior2);
+
+    // Buffer
+    
+  };
+
+  // LHS
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
+    out.set(0.);
+    (*stiffness_action_ptr)(in, out);
+    acc::scale(out, beta * mdt * mdt)
+    (*mass_action_ptr)(in, out);
+  };
+
+  // Note: I really dislike this interface. 
+  void set_dt(U dt) {
+    m_dt = dt;
+  }
+
+  template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+    mass_action_ptr->get_diag_inverse(diag_inv);
+    // TODO: add stiffness diag inverse 
+  }
+
+  template <typename Vector>
+  void rhs(Vector &u, Vector &ud, Vector &g, Vector &out) {
+    out.set(0.);
+    (*stiffness_action_ptr)(u, out);
+    (*exterior_mass_action2_ptr)(ud, out);
+    acc::scale(out, -1);
+    (*exterior_mass_action1_ptr)(g, out);
+  }
+
+private:
+  std::unique_ptr<MassAction> mass_action_ptr;
+  std::unique_ptr<StiffnessAction> stiffness_action_ptr;
+  std::unique_ptr<ExteriorMassAction> exterior_mass_action1_ptr;
+  std::unique_ptr<ExteriorMassAction> exterior_mass_action2_ptr;
+  double mdt;
+};
+
+
 template <typename T, typename U, int P, int Q, int D>
 auto create_model(const auto &spaces, const auto &material_coefficients,
                   const MeshData<U> &mesh_data,

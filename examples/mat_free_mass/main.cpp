@@ -163,6 +163,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i)
     {
+      y_d.set(0);
       gpu_action_baseline(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
@@ -176,6 +177,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i)
     {
+      y_d.set(0);
       gpu_action_sf(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
@@ -189,6 +191,7 @@ void solver(MPI_Comm comm, po::variables_map vm)
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i)
     {
+      y_d.set(0);
       gpu_action(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();

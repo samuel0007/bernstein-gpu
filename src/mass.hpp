@@ -106,7 +106,6 @@ public:
   }
 
   template <typename Vector> void operator()(Vector &in, Vector &out) {
-    out.set(T{0.0});
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -259,7 +258,6 @@ public:
   }
 
   template <typename Vector> void operator()(Vector &in, Vector &out) {
-    out.set(T{0.0});
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();

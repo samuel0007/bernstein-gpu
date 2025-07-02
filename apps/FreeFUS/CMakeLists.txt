@@ -42,7 +42,8 @@ target_include_directories(${PROJECT_NAME}
 # )
 
 link_common(${PROJECT_NAME} main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent_mpi)
+# target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent_mpi)
+target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent)
 
 
 target_compile_definitions(${PROJECT_NAME}

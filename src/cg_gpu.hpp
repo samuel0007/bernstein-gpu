@@ -151,7 +151,6 @@ public:
   int solve(Operator& A, Vector& x, const Vector& b, bool jacobi = true, bool verbose = false)
   {
     // _r->set(0.);
-    // _y->set(0.);
     // _p->set(0.);
     // _diag_inv->set(0.);
     // _y = std::make_unique<Vector>(_map, _bs);
@@ -169,6 +168,7 @@ public:
     // TODO: check sizes
 
     // Compute initial residual r0 = b - Ax0
+    _y->set(0.);
     A(x, *_y);
     axpy(*_r, T(-1), *_y, b);
 
@@ -192,6 +192,7 @@ public:
 
       // MatVec
       // y = A.p;
+      _y->set(0.);
       A(*_p, *_y);
 
       // Calculate alpha = r.r/p.y

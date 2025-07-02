@@ -109,6 +109,89 @@ private:
   }
 };
 
+
+template <typename U, typename Vector, double beta = 0.25, double gamma = 0.5> class Newmark {
+public:
+  Newmark(std::shared_ptr<fem::FunctionSpace<U>> V,
+              const PhysicalParameters<U> &params, U source_sound_speed)
+      : params(params), source_sound_speed(source_sound_speed) {
+
+    auto index_map = V->dofmap()->index_map;
+    auto bs = V->dofmap()->index_map_bs();
+    assert(bs == 1 && "not implemented");
+
+    g = std::make_unique<Vector>(index_map, bs);   // Source vector
+    RHS = std::make_unique<Vector>(index_map, bs); // RHS vector
+
+    u = std::make_unique<Vector>(index_map, bs);
+    ud = std::make_unique<Vector>(index_map, bs);
+    udd = std::make_unique<Vector>(index_map, bs);
+    u->set(0);
+    ud->set(0);
+    udd->set(0);
+  };
+
+  /// Evolve a solution under a model using a solver for a timestep dt
+  void evolve(auto &model, auto &solver, U t, U dt) {
+    update_source(t + dt); // f(t + dt)
+    const U dt2 = dt * dt;
+    // Predictor
+    // 1. Displacement: u = u + ud * dt + udd * (0.5 - beta) * dt2;
+    acc::axpy(*u, dt, *ud, *u);
+    acc::axpy(*u, (0.5 - beta) * dt2, *udd, *u);
+    // 2. Velocity: ud = ud + udd * (1 - gamma) * dt;
+    acc::axpy(*ud, (1 - gamma) * dt, *udd, *ud);
+
+    // Solve LSE
+    model->rhs(*u, *ud, *g, *RHS);
+    int solver_its = solver->solve(*model, *udd, *RHS, true);
+    spdlog::info("solver its={}", i, solver_its);
+
+    // Correctors
+    // 1. Displacement:  u = u + udd * beta * dt2
+    acc::axpy(*u, beta * dt2, *udd, *u);
+    // 2. Velocity: ud = ud + udd * gamma * dt
+    acc::axpy(*ud, gamma * dt, *udd, *ud);
+  }
+
+  void get_solution(auto &solution) {
+    thrust::copy(u->thrust_vector().begin(), u->thrust_vector().end(),
+                 solution->x()->mutable_array().begin());
+  }
+
+private:
+  PhysicalParameters<U> params;
+  U source_sound_speed;
+
+  std::unique_ptr<Vector> g;
+  std::unique_ptr<Vector> RHS;
+
+  std::unique_ptr<Vector> u;
+  std::unique_ptr<Vector> ud;
+  std::unique_ptr<Vector> udd;
+
+
+  void update_source(U t) {
+    // Apply windowing
+    U window;
+    if (t < params.period * params.window_length) {
+      window = 0.5 * (1.0 - cos(params.source_frequency * M_PI * t /
+                                params.window_length));
+    } else {
+      window = 1.0;
+    }
+
+    // Update boundary condition
+    const U homogeneous_source =
+        window * params.source_amplitude * params.source_angular_frequency /
+        source_sound_speed * cos(params.source_angular_frequency * t);
+    g->set(homogeneous_source);
+  }
+};
+
+
+
+
 template <typename U, typename Vector>
 auto create_timestepper(std::shared_ptr<fem::FunctionSpace<U>> V,
                         const PhysicalParameters<U> &params,

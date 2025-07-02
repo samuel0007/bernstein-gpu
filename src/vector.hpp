@@ -406,6 +406,7 @@ void axpy(Vector &r, S alpha, const Vector &x, const Vector &y) {
   spdlog::debug("AXPY end");
 }
 
+
 /// Scale vector by alpha
 /// @param r Result
 /// @param alpha
