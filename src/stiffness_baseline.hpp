@@ -76,7 +76,6 @@ public:
   }
 
   template <typename Vector> void operator()(Vector &in, Vector &out) {
-    // out.set(T{0.0});
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -192,8 +191,8 @@ public:
     assert(geom_d.size() == this->number_of_local_cells * 6 * nq);
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out) {
-    out.set(T{0.0});
+  template <typename Vector>
+  void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -207,7 +206,7 @@ public:
         <<<grid_size, block_size>>>(
             out_dofs, in_dofs, this->alpha_d_span.data(),
             this->geom_d_span.data(), this->dofmap_d_span.data(),
-            this->dphi_d_span.data());
+            this->dphi_d_span.data(), global_coefficient);
     check_device_last_error();
   }
 
@@ -236,6 +235,8 @@ private:
 
   thrust::device_vector<T> geom_d;
   std::span<const T> geom_d_span;
+
+  thrust::device_vector<T> buffer;
 
   thrust::device_vector<std::int32_t> dofmap_d;
   std::span<const std::int32_t> dofmap_d_span;

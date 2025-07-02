@@ -191,7 +191,7 @@ __global__ void stiffness_operator(T *__restrict__ out_dofs,
                                    const T *__restrict__ alpha_cells,
                                    const T *__restrict__ G_cells,
                                    const std::int32_t *__restrict__ dofmap,
-                                   const T *__restrict__ dphi) {
+                                   const T *__restrict__ dphi, T global_coefficient) {
   const int cell_idx = blockIdx.x;
   const int tx = threadIdx.x;
   int gdof = -1;
@@ -229,8 +229,6 @@ __global__ void stiffness_operator(T *__restrict__ out_dofs,
 
     fw0 = alpha * (G0 * val_x + G1 * val_y);
     fw1 = alpha * (G1 * val_x + G2 * val_y);
-
-
   }
   __syncthreads();
 
@@ -251,17 +249,17 @@ __global__ void stiffness_operator(T *__restrict__ out_dofs,
     // Sum contributions
     T yd = grad_x + grad_y;
     // Write back to global memory
-    atomicAdd(&out_dofs[gdof], yd);
+    atomicAdd(&out_dofs[gdof], global_coefficient * yd);
   }
 }
 
 template <typename T, int nd, int nq>
 __global__ void stiffness_operator3D(T *__restrict__ out_dofs,
-                                   const T *__restrict__ in_dofs,
-                                   const T *__restrict__ alpha_cells,
-                                   const T *__restrict__ G_cells,
-                                   const std::int32_t *__restrict__ dofmap,
-                                   const T *__restrict__ dphi) {
+                                     const T *__restrict__ in_dofs,
+                                     const T *__restrict__ alpha_cells,
+                                     const T *__restrict__ G_cells,
+                                     const std::int32_t *__restrict__ dofmap,
+                                     const T *__restrict__ dphi, T global_coefficient) {
   const int cell_idx = blockIdx.x;
   const int tx = threadIdx.x;
   int gdof = -1;
@@ -307,11 +305,10 @@ __global__ void stiffness_operator3D(T *__restrict__ out_dofs,
     fw0 = alpha * (G0 * val_x + G1 * val_y + G2 * val_z);
     fw1 = alpha * (G1 * val_x + G3 * val_y + G4 * val_z);
     fw2 = alpha * (G2 * val_x + G4 * val_y + G5 * val_z);
-
   }
 
   __syncthreads();
-  
+
   // Store values at quadrature points
   scratch1[tx] = fw0;
   scratch2[tx] = fw1;
@@ -332,7 +329,7 @@ __global__ void stiffness_operator3D(T *__restrict__ out_dofs,
     // Sum contributions
     T yd = grad_x + grad_y + grad_z;
     // Write back to global memory
-    atomicAdd(&out_dofs[gdof], yd);
+    atomicAdd(&out_dofs[gdof], global_coefficient * yd);
   }
 }
 

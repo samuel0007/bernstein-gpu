@@ -59,11 +59,11 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
     freefus::setup_insitu(V_out, P, u_out, ascent_runner, conduit_mesh,
                           ascent_actions);
 
-  auto model = freefus::create_model<T, U, P, Q, D>(
+  auto model = freefus::create_model<ModelType::LinearImplicit, T, U, P, Q, D>(
       spaces, material_coefficients, mesh_data, params, config.model_type);
   auto solver = freefus::create_solver<T, U>(V, config);
 
-  auto timestepper = freefus::create_timestepper<U, Vector>(V, params, config);
+  auto timestepper = freefus::create_timestepper<TimesteppingType::Newmark, U, Vector>(V, params, config);
 
   T h_min = freefus::compute_global_min_cell_size(mesh_data.mesh);
   T sound_speed_min = freefus::compute_global_minimum_sound_speed<T>(

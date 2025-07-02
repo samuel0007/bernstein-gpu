@@ -19,9 +19,9 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
   ascent_h::FunctionToBlueprintField(solution, conduit_mesh, field_name);
 
   conduit::Node ascent_opts;
-  ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
-  ascent_runner.open(ascent_opts);
-  // ascent_runner.open();
+  // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
+  // ascent_runner.open(ascent_opts);
+  ascent_runner.open();
 
   conduit::Node scenes;
   if (tdim == 3) {

@@ -66,9 +66,10 @@ public:
 
 private:
   static constexpr std::array<U, 4> a = {0.0, 0.5, 0.5, 1.0};
-  static constexpr std::array<U, 4> b = {1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0, 1.0 / 6.0};
+  static constexpr std::array<U, 4> b = {1.0 / 6.0, 1.0 / 3.0, 1.0 / 3.0,
+                                         1.0 / 6.0};
   static constexpr std::array<U, 4> c = {0.0, 0.5, 0.5, 1.0};
-  
+
   PhysicalParameters<U> params;
   U source_sound_speed;
 
@@ -109,11 +110,11 @@ private:
   }
 };
 
-
-template <typename U, typename Vector, double beta = 0.25, double gamma = 0.5> class Newmark {
+template <typename U, typename Vector, double beta = 0.25, double gamma = 0.5>
+class Newmark {
 public:
   Newmark(std::shared_ptr<fem::FunctionSpace<U>> V,
-              const PhysicalParameters<U> &params, U source_sound_speed)
+          const PhysicalParameters<U> &params, U source_sound_speed)
       : params(params), source_sound_speed(source_sound_speed) {
 
     auto index_map = V->dofmap()->index_map;
@@ -143,9 +144,10 @@ public:
     acc::axpy(*ud, (1 - gamma) * dt, *udd, *ud);
 
     // Solve LSE
+    model->set_dt(dt);
     model->rhs(*u, *ud, *g, *RHS);
     int solver_its = solver->solve(*model, *udd, *RHS, true);
-    spdlog::info("solver its={}", i, solver_its);
+    spdlog::info("solver its={}", solver_its);
 
     // Correctors
     // 1. Displacement:  u = u + udd * beta * dt2
@@ -170,7 +172,6 @@ private:
   std::unique_ptr<Vector> ud;
   std::unique_ptr<Vector> udd;
 
-
   void update_source(U t) {
     // Apply windowing
     U window;
@@ -189,17 +190,20 @@ private:
   }
 };
 
-
-
-
-template <typename U, typename Vector>
+template <TimesteppingType TS, typename U, typename Vector>
 auto create_timestepper(std::shared_ptr<fem::FunctionSpace<U>> V,
-                        const PhysicalParameters<U> &params,
-                        const UserConfig<U> &config) {
-  U source_sound_speed = get_source_sound_speed<U>(config.material_case);
-  return std::make_unique<ExplicitRK4<U, Vector>>(V, params,
-                                                     source_sound_speed);
-};
+                        PhysicalParameters<U> const &params,
+                        UserConfig<U> const &config) {
+  U c0 = get_source_sound_speed<U>(config.material_case);
+
+  if constexpr (TS == TimesteppingType::ExplicitRK4) {
+    return std::make_unique<ExplicitRK4<U, Vector>>(V, params, c0);
+  } else if constexpr (TS == TimesteppingType::Newmark) {
+    return std::make_unique<Newmark<U, Vector>>(V, params, c0);
+  } else {
+    static_assert(always_false_v<TS>, "Unsupported timestepping type");
+  }
+}
 
 template <typename U, int P>
 U compute_dt(std::shared_ptr<fem::Function<U>> solution, U h, U sound_speed,
@@ -211,7 +215,8 @@ U compute_dt(std::shared_ptr<fem::Function<U>> solution, U h, U sound_speed,
 }
 
 template <typename U, int P> U compute_dt(U h, U sound_speed, U period, U CFL) {
-  std::cout << "DT" << P << " " <<  h << " " << sound_speed << " " << CFL << " " <<period<< std::endl;
+  std::cout << "DT" << P << " " << h << " " << sound_speed << " " << CFL << " "
+            << period << std::endl;
   U dt = CFL * h / (sound_speed * P * P);
   const int steps_per_period = period / dt + 1;
   return period / steps_per_period;

@@ -400,7 +400,7 @@ public:
                        "local face index to local closure dofs");
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -415,7 +415,7 @@ public:
           in_dofs, out_dofs, this->cell_facet_d_span.data(),
           this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
           this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
-          this->faces_dofs_d_span.data(), this->n_faces);
+          this->faces_dofs_d_span.data(), this->n_faces, global_coefficient);
       check_device_last_error();
     }
   }
@@ -586,7 +586,7 @@ public:
     //                    "local face index to local closure dofs");
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -600,7 +600,7 @@ public:
           in_dofs, out_dofs, this->cell_facet_d_span.data(),
           this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
           this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
-          this->faces_dofs_d_span.data(), this->n_faces);
+          this->faces_dofs_d_span.data(), this->n_faces, global_coefficient);
       check_device_last_error();
     }
   }

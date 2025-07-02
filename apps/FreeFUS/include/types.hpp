@@ -3,6 +3,10 @@
 #include "stiffness_baseline.hpp"
 #include <basix/finite-element.h>
 
+
+template<auto> inline constexpr bool always_false_v = false;
+
+
 enum class MaterialCase : int {
   BP1 = 1,
   BP2 = 2,
@@ -15,6 +19,12 @@ enum class MaterialCase : int {
 
 enum class ModelType : int {
   LinearExplicit = 1,
+  LinearImplicit = 2,
+};
+
+enum class TimesteppingType : int {
+  ExplicitRK4 = 1,
+  Newmark = 2,
 };
 
 template <typename T> struct UserConfig {
@@ -26,6 +36,7 @@ template <typename T> struct UserConfig {
 
   MaterialCase material_case;
   ModelType model_type;
+  TimesteppingType timestepping_type;
 
   T CFL;
   T source_frequency;

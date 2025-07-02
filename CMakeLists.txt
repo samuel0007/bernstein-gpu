@@ -73,6 +73,7 @@ if (DEFINED ENV{CRAYPE_VERSION})
 endif()
 
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
+# set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
 set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
 if(NOT TARGET dolfinx)

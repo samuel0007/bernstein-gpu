@@ -233,7 +233,7 @@ template <typename T, int nd, int nq>
     const std::int32_t *__restrict__ cell_facet,
     const T *__restrict__ detJ_facets, const T *__restrict__ alpha_cells,
     const std::int32_t *__restrict__ dofmap, const T *__restrict__ facets_phi,
-    const std::int32_t *__restrict__ faces_dofs, int n_faces) {
+    const std::int32_t *__restrict__ faces_dofs, int n_faces, T global_coefficient) {
   const int tx = threadIdx.x;
   const int cell_idx = cell_facet[2 * blockIdx.x];
   const int local_face_idx = cell_facet[2 * blockIdx.x + 1];
@@ -275,7 +275,7 @@ template <typename T, int nd, int nq>
     for (int i = 0; i < nq; ++i) {
       fval += qvals[i] * phi[i * nd + tx];
     }
-    atomicAdd(&out_dofs[g_dof_idx], fval);
+    atomicAdd(&out_dofs[g_dof_idx], global_coefficient * fval);
   }
 }
 

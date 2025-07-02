@@ -66,6 +66,15 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.insitu = vm["insitu"].as<bool>();
   cfg.insitu_output_steps = vm["insitu-output-steps"].as<int>();
   cfg.model_type = static_cast<ModelType>(vm["model-type"].as<int>());
+  cfg.timestepping_type =
+      static_cast<TimesteppingType>(vm["timestepping-type"].as<int>());
+  if (static_cast<int>(cfg.model_type) !=
+      static_cast<int>(cfg.timestepping_type)) {
+    // TODO: maybe only expose single "model-timestepper" combo, as whatsoever
+    // the classes are coupled at the mathematical level. Maybe remove model
+    // type concept and only have an "operator provider" concept.
+    throw std::runtime_error("Invalid model and timestepper configuration");
+  }
   cfg.cg_tol = vm["cg-tol"].as<double>();
   cfg.cg_max_steps = vm["cg-maxsteps"].as<int>();
   cfg.window_length = vm["window-length"].as<double>();
@@ -83,7 +92,8 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("output-path,o", po::value<std::string>()->default_value("output.bp"), "output path, must end in .bp")
       ("polynomial-basis", po::value<std::string>()->default_value("gll_warped"), "Polynomial basis: bernstein, gll_warped")
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
-      ("model-type", po::value<int>()->default_value(1), "Model type [1-]")
+      ("model-type", po::value<int>()->default_value(1), "Model type [1-2]")
+      ("timestepping-type", po::value<int>()->default_value(1), "Timestepping type [1-2]")
       ("CFL", po::value<T>()->default_value(0.5), "CFL number")
       ("source-frequency", po::value<T>()->default_value(0.5e6), "Source frequency (Hz)")
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
