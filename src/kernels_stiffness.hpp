@@ -333,6 +333,40 @@ __global__ void stiffness_operator3D(T *__restrict__ out_dofs,
   }
 }
 
+template <typename T, int nd, int nq>
+__global__ void stiffness_operator3D_diagonal(T *__restrict__ out_dofs,
+                                     const T *__restrict__ alpha_cells,
+                                     const T *__restrict__ G_cells,
+                                     const std::int32_t *__restrict__ dofmap,
+                                     const T *__restrict__ dphi, T global_coefficient) {
+  const int cell_idx = blockIdx.x;
+  const int tx = threadIdx.x;
+  const int gdof = dofmap[tx + cell_idx * nd];
+  const T alpha = alpha_cells[cell_idx];
+
+  auto dphix = [&](auto j, auto k) { return dphi[j * nd + k]; };
+  auto dphiy = [&](auto j, auto k) { return dphi[nd * nq + j * nd + k]; };
+  auto dphiz = [&](auto j, auto k) { return dphi[2 * nd * nq + j * nd + k]; };
+
+  auto G_ = [&](int r, int ix) { return G_cells[nq * (cell_idx * 6 + r) + ix]; };
+
+  T val = 0.0;
+  for (int iq = 0; iq < nq; ++iq) {
+    val += G_(0, iq) * dphix(iq, tx) * dphix(iq, tx);
+    val += G_(1, iq) * dphix(iq, tx) * dphiy(iq, tx);
+    val += G_(2, iq) * dphix(iq, tx) * dphiz(iq, tx);
+    val += G_(1, iq) * dphiy(iq, tx) * dphix(iq, tx);
+    val += G_(3, iq) * dphiy(iq, tx) * dphiy(iq, tx);
+    val += G_(4, iq) * dphiy(iq, tx) * dphiz(iq, tx);
+    val += G_(2, iq) * dphiz(iq, tx) * dphix(iq, tx);
+    val += G_(4, iq) * dphiz(iq, tx) * dphiy(iq, tx);
+    val += G_(5, iq) * dphiz(iq, tx) * dphiz(iq, tx);
+  }
+
+  // Write back to global memory
+  atomicAdd(&out_dofs[gdof], alpha * global_coefficient * val);
+}
+
 template <typename T, int P>
 __global__ void
 mat_diagonal_tet(const T *entity_constants, T *b, const T *G_entity,

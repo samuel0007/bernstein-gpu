@@ -406,7 +406,6 @@ void axpy(Vector &r, S alpha, const Vector &x, const Vector &y) {
   spdlog::debug("AXPY end");
 }
 
-
 /// Scale vector by alpha
 /// @param r Result
 /// @param alpha
@@ -450,6 +449,16 @@ void transform(Vector &x, UnaryFunction op) {
   thrust::transform(thrust::device, x.array().begin(),
                     x.array().begin() + x.map()->size_local(),
                     x.mutable_array().begin(), op);
+}
+
+template <typename Vector> void inverse(Vector &x) {
+  using T = typename Vector::value_type;
+  // Note: using .array() confuses thrust and it aliases the memory
+  // It's UB. 
+  thrust::transform(thrust::device, x.mutable_array().begin(),
+                    x.mutable_array().begin() + x.map()->size_local(),
+                    x.mutable_array().begin(),
+                    [] __host__ __device__(T xi) { return 1.0 / xi; });
 }
 
 } // namespace dolfinx::acc

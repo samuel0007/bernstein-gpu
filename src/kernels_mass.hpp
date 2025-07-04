@@ -228,12 +228,13 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
 /// @param K number of dofs on tdim entity
 template <typename T, int nd, int nq>
 // __launch_bounds__(max(nq, nd)) what i want to do
- __global__ void facets_mass_operator_baseline(
+__global__ void facets_mass_operator_baseline(
     const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
     const std::int32_t *__restrict__ cell_facet,
     const T *__restrict__ detJ_facets, const T *__restrict__ alpha_cells,
     const std::int32_t *__restrict__ dofmap, const T *__restrict__ facets_phi,
-    const std::int32_t *__restrict__ faces_dofs, int n_faces, T global_coefficient) {
+    const std::int32_t *__restrict__ faces_dofs, int n_faces,
+    T global_coefficient) {
   const int tx = threadIdx.x;
   const int cell_idx = cell_facet[2 * blockIdx.x];
   const int local_face_idx = cell_facet[2 * blockIdx.x + 1];
@@ -277,6 +278,30 @@ template <typename T, int nd, int nq>
     }
     atomicAdd(&out_dofs[g_dof_idx], global_coefficient * fval);
   }
+}
+
+template <typename T, int nd, int nq>
+__global__ void mass_exterior_diagonal(
+    T *__restrict__ out_dofs,
+    const std::int32_t *__restrict__ cell_facet,
+    const T *__restrict__ detJ_facets, const T *__restrict__ alpha_cells,
+    const std::int32_t *__restrict__ dofmap, const T *__restrict__ facets_phi,
+    const std::int32_t *__restrict__ faces_dofs, int n_faces,
+    T global_coefficient) {
+  const int tx = threadIdx.x;
+  const int cell_idx = cell_facet[2 * blockIdx.x];
+  const int local_face_idx = cell_facet[2 * blockIdx.x + 1];
+  int g_dof_idx = dofmap[tx + nd * cell_idx];
+
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
+  const T *phi = &facets_phi[local_face_idx * nd * nq];
+
+  T qval = 0.;
+  for (int i = 0; i < nq; ++i) {
+    T phi_l = phi[i * nd + tx];
+    qval += phi_l * phi_l * detJ_facets[tx + local_face_idx * nq + cell_idx * n_faces * nq];
+  }
+  atomicAdd(&out_dofs[g_dof_idx], qval * alpha * global_coefficient);
 }
 
 template <typename T, int nd, int nq>

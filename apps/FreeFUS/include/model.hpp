@@ -130,7 +130,13 @@ public:
   void set_dt(U dt) { m_dt = dt; }
 
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
-    mass_action_ptr->get_diag_inverse(diag_inv);
+    diag_inv.set(0.);
+    // mass_action_ptr->get_diag_inverse(diag_inv);
+    mass_action_ptr->get_diag(diag_inv);
+    exterior_mass_action2_ptr->get_diag(diag_inv, gamma * m_dt);
+    stiffness_action_ptr->get_diag(diag_inv, beta *m_dt *m_dt);
+    acc::inverse(diag_inv);
+
     // TODO: add stiffness and exterior mass diag inverse
   }
 

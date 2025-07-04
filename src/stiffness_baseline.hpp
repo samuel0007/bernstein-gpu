@@ -210,8 +210,25 @@ public:
     check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
-    assert(false && "todo for jacobi preconditioning of cg");
+  template <typename Vector> void get_diag_inverse(Vector &diag_inv,  U global_coefficient = 1.) {
+    diag_inv.set(0.);
+    this->get_diag(diag_inv, global_coefficient);
+    thrust::transform(thrust::device, diag_inv.mutable_array().begin(),
+                      diag_inv.mutable_array().begin() + diag_inv.map()->size_local(),
+                      diag_inv.mutable_array().begin(),
+                      [] __host__ __device__(T yi) { return 1.0 / yi; });
+  }
+
+  template <typename Vector> void get_diag(Vector &diag, U global_coefficient = 1.) {
+    T *out_dofs = diag.mutable_array().data();
+
+    dim3 grid_size(this->number_of_local_cells);
+    dim3 block_size(nd);
+    kernels::stiffness::stiffness_operator3D_diagonal<T, nd, nq><<<grid_size, block_size>>>(
+        out_dofs, this->alpha_d_span.data(), this->geom_d_span.data(),
+        this->dofmap_d_span.data(), this->dphi_d_span.data(),
+        global_coefficient);
+    check_device_last_error();
   }
 
 private:
