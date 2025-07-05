@@ -29,6 +29,9 @@ auto make_element_spaces(const std::shared_ptr<dolfinx::mesh::Mesh<T>> &mesh,
   auto V_DG = std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
       mesh, std::make_shared<const fem::FiniteElement<T>>(el_DG)));
 
+  spdlog::info("V Local dofs: {}, Global Dofs: {}", V->dofmap()->index_map->size_local(), V->dofmap()->index_map->size_global());
+  spdlog::info("V_DG Local dofs: {}, Global Dofs: {}", V_DG->dofmap()->index_map->size_local(), V_DG->dofmap()->index_map->size_global());
+
   return std::make_tuple(el, el_DG, V, V_DG);
 }
 

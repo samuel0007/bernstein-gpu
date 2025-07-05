@@ -12,12 +12,12 @@ MeshData<U> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
   auto coord_element = fem::CoordinateElement<double>(cell_type, 1);
 
   dolfinx::io::XDMFFile fmesh(comm, mesh_filepath, "r");
-  auto base_mesh_p = std::make_shared<mesh::Mesh<U>>(
-    fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
-  auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
-      ghost_layer_mesh(*base_mesh_p, coord_element));
-  // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
+  // auto base_mesh_p = std::make_shared<mesh::Mesh<U>>(
   //   fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
+  // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
+  //     ghost_layer_mesh(*base_mesh_p, coord_element));
+  auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
+    fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
 
   const int tdim = mesh_ptr->topology()->dim();
   mesh_ptr->topology()->create_connectivity(tdim - 1, tdim);

@@ -20,6 +20,7 @@ enum class MaterialCase : int {
 enum class ModelType : int {
   LinearExplicit = 1,
   LinearImplicit = 2,
+  LinearLossyImplicit = 3,
 };
 
 enum class TimesteppingType : int {

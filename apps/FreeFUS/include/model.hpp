@@ -131,13 +131,10 @@ public:
 
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
     diag_inv.set(0.);
-    // mass_action_ptr->get_diag_inverse(diag_inv);
     mass_action_ptr->get_diag(diag_inv);
     exterior_mass_action2_ptr->get_diag(diag_inv, gamma * m_dt);
-    stiffness_action_ptr->get_diag(diag_inv, beta *m_dt *m_dt);
+    stiffness_action_ptr->get_diag(diag_inv, beta * m_dt * m_dt);
     acc::inverse(diag_inv);
-
-    // TODO: add stiffness and exterior mass diag inverse
   }
 
   template <typename Vector>
@@ -153,6 +150,112 @@ private:
   std::unique_ptr<StiffnessAction> stiffness_action_ptr;
   std::unique_ptr<ExteriorMassAction> exterior_mass_action1_ptr;
   std::unique_ptr<ExteriorMassAction> exterior_mass_action2_ptr;
+  double m_dt;
+};
+
+template <typename T, typename U, int P, int Q, int D, double beta = 0.25,
+          double gamma = 0.5>
+class LinearLossyImplicit {
+  using Func_ptr = std::shared_ptr<fem::Function<U>>;
+  using MassAction = MassAction<T, U, P, Q, D>;
+  using StiffnessAction = StiffnessAction<T, U, P, Q, D>;
+  using ExteriorMassAction = ExteriorMassAction<T, U, P, Q, D>;
+
+public:
+  /// @brief TODO this is not very dry. We could split "operator provider" and
+  /// simply a Model which combines these operators (and calls somt like
+  /// operator_provider.init())
+  /// @param spaces
+  /// @param mesh
+  /// @param rho0
+  /// @param c0
+  /// @param facet_domains
+  LinearLossyImplicit(auto spaces, std::shared_ptr<mesh::Mesh<U>> mesh,
+                      Func_ptr rho0, Func_ptr c0, Func_ptr delta0,
+                      std::vector<std::vector<std::int32_t>> facet_domains) {
+    auto [el, el_DG, V, V_DG] = spaces;
+
+    std::span<U> c0_ = c0->x()->mutable_array();
+    std::span<U> rho0_ = rho0->x()->mutable_array();
+    std::span<U> delta0_ = delta0->x()->mutable_array();
+    const int ncells = c0_.size();
+
+    std::vector<U> alpha_M(ncells);
+    std::vector<U> alpha_Mgamma(ncells);
+    std::vector<U> alpha_C(ncells);
+    std::vector<U> alpha_Cgamma(ncells);
+    std::vector<U> alpha_K(ncells);
+    std::vector<U> alpha_F(ncells);
+    std::vector<U> alpha_Fd(ncells);
+
+    for (std::size_t i = 0; i < ncells; ++i) {
+      alpha_M[i] = 1. / (rho0_[i] * c0_[i] * c0_[i]);
+      alpha_Mgamma[i] = delta0_[i] / (rho0_[i] * c0_[i] * c0_[i] * c0_[i]);
+
+      alpha_C[i] = delta0_[i] / (rho0_[i] * c0_[i] * c0_[i]);
+      alpha_Cgamma[i] = 1. / (rho0_[i] * c0_[i]);
+
+      alpha_K[i] = 1. / rho0_[i];
+
+      alpha_F[i] = 1. / rho0_[i];
+      alpha_Fd[i] = delta0_[i] / (rho0_[i] * c0_[i] * c0_[i]);
+    }
+
+    M_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_M);
+    Mgamma_action_ptr = std::make_unique<ExteriorMassAction>(
+        mesh, V, facet_domains[1], alpha_Mgamma);
+    C_action_ptr = std::make_unique<StiffnessAction>(mesh, V, alpha_C);
+    Cgamma_action_ptr = std::make_unique<ExteriorMassAction>(
+        mesh, V, facet_domains[1], alpha_Cgamma);
+    K_action_ptr = std::make_unique<StiffnessAction>(mesh, V, alpha_K);
+    F_action_ptr = std::make_unique<ExteriorMassAction>(
+        mesh, V, facet_domains[0], alpha_F);
+    Fd_action_ptr = std::make_unique<ExteriorMassAction>(
+        mesh, V, facet_domains[0], alpha_Fd);
+  };
+
+  // LHS: (M+M_Γ) + (C+C_Γ)*gamma*dt + K*beta*dt2) @ in
+  template <typename Vector> void operator()(Vector &in, Vector &out) {
+    out.set(0.);
+    (*M_action_ptr)(in, out);
+    (*Mgamma_action_ptr)(in, out);
+    (*C_action_ptr)(in, out, gamma *m_dt);
+    (*Cgamma_action_ptr)(in, out, gamma *m_dt);
+    (*K_action_ptr)(in, out, beta *m_dt *m_dt);
+  };
+
+  // Note: I really dislike this interface.
+  void set_dt(U dt) { m_dt = dt; }
+
+  template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+    diag_inv.set(0.);
+    M_action_ptr->get_diag(diag_inv);
+    Mgamma_action_ptr->get_diag(diag_inv);
+    C_action_ptr->get_diag(diag_inv, gamma * m_dt);
+    Cgamma_action_ptr->get_diag(diag_inv, gamma * m_dt);
+    K_action_ptr->get_diag(diag_inv, beta * m_dt * m_dt);
+    acc::inverse(diag_inv);
+  }
+
+  // RHS: F - (C+C_Γ) @ ud - K @ u
+  template <typename Vector>
+  void rhs(Vector &u, Vector &ud, Vector &g, Vector &gd, Vector &out) {
+    out.set(0.);
+    (*F_action_ptr)(g, out);
+    (*Fd_action_ptr)(gd, out);
+    (*Cgamma_action_ptr)(ud, out, -1);
+    (*C_action_ptr)(ud, out, -1);
+    (*K_action_ptr)(u, out, -1);
+  }
+
+private:
+  std::unique_ptr<MassAction> M_action_ptr;
+  std::unique_ptr<ExteriorMassAction> Mgamma_action_ptr;
+  std::unique_ptr<StiffnessAction> C_action_ptr;
+  std::unique_ptr<ExteriorMassAction> Cgamma_action_ptr;
+  std::unique_ptr<StiffnessAction> K_action_ptr;
+  std::unique_ptr<ExteriorMassAction> F_action_ptr;
+  std::unique_ptr<ExteriorMassAction> Fd_action_ptr;
   double m_dt;
 };
 
@@ -209,7 +312,7 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
   std::cout << std::format("Domain {}: {}\n", 2, facet_domain.size() / 2);
   facet_domains.push_back(facet_domain);
 
-  auto [rho0, c0] = material_coefficients;
+  auto [rho0, c0, delta0] = material_coefficients;
 
   if constexpr (MT == ModelType::LinearExplicit) {
     return std::make_unique<LinearExplicit<T, U, P, Q, D>>(
@@ -217,6 +320,9 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
   } else if constexpr (MT == ModelType::LinearImplicit) {
     return std::make_unique<LinearImplicit<T, U, P, Q, D>>(
         spaces, mesh_data.mesh, rho0, c0, facet_domains);
+  } else if constexpr (MT == ModelType::LinearLossyImplicit) {
+    return std::make_unique<LinearLossyImplicit<T, U, P, Q, D>>(
+        spaces, mesh_data.mesh, rho0, c0, delta0, facet_domains);
   } else {
     static_assert(always_false_v<MT>, "Unsupported timestepping type");
   }

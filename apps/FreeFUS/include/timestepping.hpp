@@ -121,8 +121,10 @@ public:
     auto bs = V->dofmap()->index_map_bs();
     assert(bs == 1 && "not implemented");
 
-    g = std::make_unique<Vector>(index_map, bs);   // Source vector
-    RHS = std::make_unique<Vector>(index_map, bs); // RHS vector
+    g = std::make_unique<Vector>(index_map, bs);
+    gd = std::make_unique<Vector>(index_map, bs);
+
+    RHS = std::make_unique<Vector>(index_map, bs);
 
     u = std::make_unique<Vector>(index_map, bs);
     ud = std::make_unique<Vector>(index_map, bs);
@@ -145,7 +147,7 @@ public:
 
     // Solve LSE
     model->set_dt(dt);
-    model->rhs(*u, *ud, *g, *RHS);
+    model->rhs(*u, *ud, *g, *gd, *RHS);
     int solver_its = solver->solve(*model, *udd, *RHS, true);
     spdlog::info("solver its={}", solver_its);
 
@@ -166,6 +168,8 @@ private:
   U source_sound_speed;
 
   std::unique_ptr<Vector> g;
+  std::unique_ptr<Vector> gd;
+
   std::unique_ptr<Vector> RHS;
 
   std::unique_ptr<Vector> u;
@@ -175,18 +179,27 @@ private:
   void update_source(U t) {
     // Apply windowing
     U window;
+    U dwindow;
     if (t < params.period * params.window_length) {
       window = 0.5 * (1.0 - cos(params.source_frequency * M_PI * t /
                                 params.window_length));
+      dwindow = 0.5 * M_PI * params.source_frequency / params.window_length *
+                sin(params.source_frequency * M_PI * t / params.window_length);
     } else {
       window = 1.0;
+      dwindow = 0.;
     }
 
     // Update boundary condition
-    const U homogeneous_source =
-        window * params.source_amplitude * params.source_angular_frequency /
-        source_sound_speed * cos(params.source_angular_frequency * t);
-    g->set(homogeneous_source);
+    const U w0 = params.source_angular_frequency;
+    const U p0 = params.source_amplitude;
+
+    const U source = window * p0 * w0 / source_sound_speed * cos(w0 * t);
+
+    const U dsource = dwindow * p0 * w0 / source_sound_speed * cos(w0 * t) -
+                      dwindow * p0 * w0 * w0 / source_sound_speed * sin(w0 * t);
+    g->set(source);
+    gd->set(dsource);
   }
 };
 
@@ -208,7 +221,7 @@ auto create_timestepper(std::shared_ptr<fem::FunctionSpace<U>> V,
 template <typename U, int P>
 U compute_dt(std::shared_ptr<fem::Function<U>> solution, U h, U sound_speed,
              U period, U CFL) {
-  // this could implement better heuristics (for nonlinear case) dependent on
+  // this could implement better heuristics (for explicit nonlinear case) dependent on
   // the solution value. Note that this would require a global reduction.
   assert(false && "TODO");
   return 0.;
