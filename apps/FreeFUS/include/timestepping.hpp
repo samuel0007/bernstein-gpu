@@ -308,6 +308,8 @@ public:
   }
 
 private:
+  static constexpr double beta = 0.25;
+  static constexpr double gamma = 0.5;
   PhysicalParameters<U> params;
   U source_sound_speed;
 

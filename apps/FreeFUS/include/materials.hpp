@@ -125,11 +125,10 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
   auto delta0 = std::make_shared<fem::Function<U>>(V_DG);
   auto b0 = std::make_shared<fem::Function<U>>(V_DG);
 
+  int cell_count = 0;
   for (auto material : materials_data) {
     auto cells = mesh_data.cell_tags->find(material.domain_id);
-    // auto indices = mesh_data.cell_tags->indices();
-    // auto values = mesh_data.cell_tags->values();
-    // TODO: understand why the above doesn't work in parallel.
+    cell_count += cells.size();
     // const int tdim = mesh_data.mesh->topology()->dim();
     // const int N = mesh_data.mesh->topology()->index_map(tdim)->size_local();
     // std::vector<int> cells(N);
@@ -155,6 +154,13 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
     std::for_each(cells.begin(), cells.end(),
                   [&](std::int32_t &i) { b0_[i] = material.nonlinear_coefficient; });
   }
+  const int tdim = V_DG->mesh()->topology()->dim();
+  spdlog::info("Cells: local={}, ghost={}, total={}",
+              V_DG->mesh()->topology()->index_map(tdim)->size_local(),
+              V_DG->mesh()->topology()->index_map(tdim)->num_ghosts(),
+              V_DG->mesh()->topology()->index_map(tdim)->size_global());
+  spdlog::info("Cell count: {}", cell_count);
+  assert(cell_count == V_DG->mesh()->topology()->index_map(tdim)->size_local());
   rho0->x()->scatter_fwd();
   c0->x()->scatter_fwd();
   delta0->x()->scatter_fwd();

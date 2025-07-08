@@ -71,8 +71,7 @@ private:
   std::unique_ptr<ExteriorMassAction> exterior_mass_action2_ptr;
 };
 
-template <typename T, typename U, int P, int Q, int D, double beta = 0.25,
-          double gamma = 0.5>
+template <typename T, typename U, int P, int Q, int D>
 class LinearImplicit {
   using Func_ptr = std::shared_ptr<fem::Function<U>>;
   using MassAction = MassAction<T, U, P, Q, D>;
@@ -146,6 +145,8 @@ public:
   }
 
 private:
+  static constexpr double beta = 0.25;
+  static constexpr double gamma = 0.5;
   std::unique_ptr<MassAction> mass_action_ptr;
   std::unique_ptr<StiffnessAction> stiffness_action_ptr;
   std::unique_ptr<ExteriorMassAction> exterior_mass_action1_ptr;
@@ -153,8 +154,7 @@ private:
   double m_dt;
 };
 
-template <typename T, typename U, int P, int Q, int D, double beta = 0.25,
-          double gamma = 0.5>
+template <typename T, typename U, int P, int Q, int D>
 class LinearLossyImplicit {
   using Func_ptr = std::shared_ptr<fem::Function<U>>;
   using MassAction = MassAction<T, U, P, Q, D>;
@@ -249,6 +249,8 @@ public:
   }
 
 private:
+  static constexpr double beta = 0.25;
+  static constexpr double gamma = 0.5;
   std::unique_ptr<MassAction> M_action_ptr;
   std::unique_ptr<ExteriorMassAction> Mgamma_action_ptr;
   std::unique_ptr<StiffnessAction> C_action_ptr;
@@ -461,52 +463,59 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
                   const PhysicalParameters<U> &params, ModelType model_type) {
 
   std::vector<std::vector<std::int32_t>> facet_domains;
-  // std::vector<int> ft_unique = {1, 2};
-  // for (int i = 0; i < ft_unique.size(); ++i) {
-  //   int tag = ft_unique[i];
-  //   std::vector<std::int32_t> facet_domain =
-  //   fem::compute_integration_domains(
-  //       fem::IntegralType::exterior_facet,
-  //       *(mesh_data.mesh->topology_mutable()),
-  //       mesh_data.facet_tags->find(tag));
-  //   std::cout << std::format("Domain {}: {}\n", tag, facet_domain.size() /
-  //   2); facet_domains.push_back(facet_domain);
-  // }
+  std::vector<int> ft_unique = {1, 2};
+  const std::vector<std::int32_t> bfacets = mesh::exterior_facet_indices(*(mesh_data.mesh->topology()));
+  for (int i = 0; i < ft_unique.size(); ++i) {
+    int tag = ft_unique[i];
+    std::vector<std::int32_t> facets_tags;
+    if(tag == 2) {
+      facets_tags = bfacets;
+    } else {
+      facets_tags = mesh_data.facet_tags->find(tag);
+    }
+    std::vector<std::int32_t> facet_domain =
+    fem::compute_integration_domains(
+        fem::IntegralType::exterior_facet,
+        *(mesh_data.mesh->topology_mutable()),
+        facets_tags);
+    std::cout << std::format("Domain {}: {}\n", tag, facet_domain.size() /
+    2); facet_domains.push_back(facet_domain);
+  }
 
   // TODO
-  std::vector<std::int32_t> facets1 =
-      mesh::locate_entities_boundary(*mesh_data.mesh, 2, [](auto x) {
-        std::vector<std::int8_t> marker(x.extent(1), false);
-        for (std::size_t p = 0; p < x.extent(1); ++p) {
-          auto x0 = x(2, p);
-          if (x0 > -0.002)
-            marker[p] = true;
-        }
-        return marker;
-      });
+  // std::vector<std::int32_t> facets1 =
+  //     mesh::locate_entities_boundary(*mesh_data.mesh, 2, [](auto x) {
+  //       std::vector<std::int8_t> marker(x.extent(1), false);
+  //       for (std::size_t p = 0; p < x.extent(1); ++p) {
+  //         auto x0 = x(2, p);
+  //         if (x0 > -0.002)
+  //           marker[p] = true;
+  //       }
+  //       return marker;
+  //     });
 
-  std::vector<std::int32_t> facets2 =
-      mesh::locate_entities_boundary(*mesh_data.mesh, 2, [](auto x) {
-        std::vector<std::int8_t> marker(x.extent(1), false);
-        for (std::size_t p = 0; p < x.extent(1); ++p) {
-          auto x0 = x(2, p);
-          if (x0 <= -0.002)
-            marker[p] = true;
-        }
-        return marker;
-      });
+  // std::vector<std::int32_t> facets2 =
+  //     mesh::locate_entities_boundary(*mesh_data.mesh, 2, [](auto x) {
+  //       std::vector<std::int8_t> marker(x.extent(1), false);
+  //       for (std::size_t p = 0; p < x.extent(1); ++p) {
+  //         auto x0 = x(2, p);
+  //         if (x0 <= -0.002)
+  //           marker[p] = true;
+  //       }
+  //       return marker;
+  //     });
 
-  std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
-      fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
-      facets1);
-  std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
-  facet_domains.push_back(facet_domain);
+  // std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
+  //     fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
+  //     facets1);
+  // std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
+  // facet_domains.push_back(facet_domain);
 
-  facet_domain = fem::compute_integration_domains(
-      fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
-      facets2);
-  std::cout << std::format("Domain {}: {}\n", 2, facet_domain.size() / 2);
-  facet_domains.push_back(facet_domain);
+  // facet_domain = fem::compute_integration_domains(
+      // fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
+      // facets2);
+  // std::cout << std::format("Domain {}: {}\n", 2, facet_domain.size() / 2);
+  // facet_domains.push_back(facet_domain);
 
   auto [rho0, c0, delta0, b0] = material_coefficients;
 
