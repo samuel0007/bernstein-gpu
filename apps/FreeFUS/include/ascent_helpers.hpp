@@ -92,6 +92,39 @@ std::vector<int> MeshRefTetrahedron(const int P) {
 }
 
 template <typename T>
+void MeshToBlueprintMesh(std::shared_ptr<fem::FunctionSpace<T>> V, conduit::Node &out) {
+  // Topology: get connectivity array
+  auto topology =  V->mesh()->topology();
+  const int tdim = topology->dim();
+  std::vector<int> conn = topology->connectivity(tdim, 0)->array();
+
+  // Geometry: get coordinates
+  std::span<const T> coords = V->mesh()->geometry().x();
+  const int n_coords = coords.size() / 3;
+  std::vector<T> X(n_coords), Y(n_coords), Z(n_coords);
+  for (int i = 0; i < n_coords; ++i) {
+    X[i] = coords[3 * i];
+    Y[i] = coords[3 * i + 1];
+    Z[i] = coords[3 * i + 2];
+  }
+
+  // Fill Conduit node for Blueprint mesh
+  out["coordsets/coords/type"] = "explicit";
+  out["coordsets/coords/values/x"].set(X.data(), n_coords);
+  out["coordsets/coords/values/y"].set(Y.data(), n_coords);
+  out["coordsets/coords/values/z"].set(Z.data(), n_coords);
+
+  out["topologies/mesh/type"] = "unstructured";
+  out["topologies/mesh/coordset"] = "coords";
+  auto it = dolfinx_celltype_to_blueprint.find(topology->cell_type());
+  if (it == dolfinx_celltype_to_blueprint.end())
+    throw std::runtime_error(
+        "Unknown cell type in dolfinx_celltype_to_blueprint mapping");
+  out["topologies/mesh/elements/shape"] = it->second;
+  out["topologies/mesh/elements/connectivity"].set(conn.data(), conn.size());
+}
+
+template <typename T>
 void MeshToBlueprintMesh(std::shared_ptr<fem::FunctionSpace<T>> V, const int P,
                          conduit::Node &out) {
   // Shape: (num_dofs, 3)
@@ -157,6 +190,18 @@ void DG0FunctionToBlueprintField(std::shared_ptr<fem::Function<T>> f,
   out["fields"][field_name]["values"].set_external(values.data(),
                                                    values.size());
 }
+
+template <typename T>
+void CG1FunctionToBlueprintField(std::shared_ptr<fem::Function<T>> f,
+                                 conduit::Node &out,
+                                 const std::string &field_name) {
+  std::span<T> values = f->x()->mutable_array();
+  out["fields"][field_name]["association"] = "vertex"; // CG1
+  out["fields"][field_name]["topology"] = "mesh";
+  out["fields"][field_name]["values"].set_external(values.data(),
+                                                   values.size());
+}
+
 
 template <typename T>
 void FunctionToBlueprintField(std::shared_ptr<fem::Function<T>> f,

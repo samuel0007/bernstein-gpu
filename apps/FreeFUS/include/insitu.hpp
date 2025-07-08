@@ -7,21 +7,28 @@
 namespace freefus {
 
 template <typename T>
-void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
+void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
                   int polynomial_degree,
                   const std::shared_ptr<fem::Function<T>> &solution,
                   ascent::Ascent &ascent_runner, conduit::Node &conduit_mesh,
                   conduit::Node &ascent_actions,
+                  const UserConfig<T>& config,
                   const std::string &field_name = "u") {
   const int tdim = V->mesh()->topology()->dim();
   ascent_h::MeshToBlueprintMesh(V, polynomial_degree, conduit_mesh);
-  // Data is passed by reference
   ascent_h::FunctionToBlueprintField(solution, conduit_mesh, field_name);
+  // ascent_h::MeshToBlueprintMesh<T>(V, conduit_mesh);
+  // ascent_h::CG1FunctionToBlueprintField(solution, conduit_mesh, field_name);
+
+  // ascent_h::FunctionToBlueprintField(solution, conduit_mesh, field_name);
+  // Data is passed by reference
+  // ascent_h::DG0FunctionToBlueprintField(solution, conduit_mesh, field_name);
 
   conduit::Node ascent_opts;
+
+  ascent_opts["default_dir"] = config.mesh_dir;
   // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
-  // ascent_runner.open(ascent_opts);
-  ascent_runner.open();
+  ascent_runner.open(ascent_opts);
 
   conduit::Node scenes;
   if (tdim == 3) {
@@ -40,8 +47,14 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
     scenes["s1/plots/p3/pipeline"] = "pl3";
     scenes["s1/plots/p3/color_table/annotation"] = "false";
 
-    // scenes["s2/plots/p1/type"] = "volume";
-    // scenes["s2/plots/p1/field"] = field_name;
+    scenes["s2/plots/p1/type"] = "volume";
+    scenes["s2/plots/p1/field"] = field_name;
+
+    scenes["s3/plots/p1/type"] = "pseudocolor";
+    scenes["s3/plots/p1/field"] = field_name;
+    scenes["s3/plots/p1/pipeline"] = "pl4";
+
+
 
     // scenes["s1/plots/p2/type"] = "mesh";
     scenes["s1/image_prefix"] = field_name;
@@ -50,6 +63,26 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
     pipelines["pl1/f1/type"] = "slice";
     pipelines["pl2/f1/type"] = "slice";
     pipelines["pl3/f1/type"] = "slice";
+
+    pipelines["pl4/f1/type"] = "clip";
+
+    pipelines["pl4/f2/type"] = "contour";
+    pipelines["pl4/f2/params/field"] = field_name;
+    pipelines["pl4/f2/params/iso_values"] = 0.;
+
+    
+    {
+      auto &params = pipelines["pl4/f1/params"];
+      auto &point = params["point"];
+      point["x_offset"] = 0.0;
+      point["y_offset"] = 0.0;
+      point["z_offset"] = 0.0;
+
+      auto &normal = params["normal"];
+      normal["x"] = 0.0;
+      normal["y"] = 1.0;
+      normal["z"] = 0.0;
+    }
 
     {
       auto &params = pipelines["pl1/f1/params"];
@@ -102,13 +135,13 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
     scenes["s1/renders/r2/camera/azimuth"] = 10.0;
     scenes["s1/renders/r2/camera/elevation"] = 80.0;
 
-    // scenes["s2/renders/r1/image_prefix"] = "rv1";
-    // scenes["s2/renders/r1/camera/azimuth"] = 20.0;
-    // scenes["s2/renders/r1/camera/elevation"] = 40.0;
+    scenes["s2/renders/r1/image_prefix"] = "rv1";
+    scenes["s2/renders/r1/camera/azimuth"] = 45.0;
+    scenes["s2/renders/r1/camera/elevation"] = 40.0;
 
-    // scenes["s2/renders/r2/image_prefix"] = "rv2";
-    // scenes["s2/renders/r2/camera/azimuth"] = -20.0;
-    // scenes["s2/renders/r2/camera/elevation"] = 40.0;
+    scenes["s3/renders/r1/image_prefix"] = "ri1";
+    scenes["s3/renders/r1/camera/azimuth"] = 20.0;
+    scenes["s3/renders/r1/camera/elevation"] = 40.0;
 
     conduit::Node &add_pipelines = ascent_actions.append();
     add_pipelines["action"] = "add_pipelines";
@@ -126,7 +159,9 @@ void setup_insitu(const std::shared_ptr<fem::FunctionSpace<T>> &V,
   add_scenes["action"] = "add_scenes";
   add_scenes["scenes"] = scenes;
 
-  spdlog::info("Ascent actions {}", ascent_actions.to_yaml());
+  if(!config.insitu_with_yaml){
+    spdlog::info("Ascent actions {}", ascent_actions.to_yaml());
+  }
 }
 
 template <typename T>

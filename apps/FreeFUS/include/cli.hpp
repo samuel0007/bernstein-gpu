@@ -48,6 +48,7 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   UserConfig<U> cfg;
   cfg.mesh_name = vm["mesh"].as<std::string>();
   cfg.mesh_filepath = fs::path(DATA_DIR) / cfg.mesh_name / "mesh.xdmf";
+  cfg.mesh_dir = fs::path(DATA_DIR) / cfg.mesh_name;
   cfg.lvariant = str_to_basixlv.at(vm["polynomial-basis"].as<std::string>());
   cfg.output_filepath = vm["output-path"].as<std::string>();
   {
@@ -65,6 +66,7 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.material_case = static_cast<MaterialCase>(vm["material-case"].as<int>());
   cfg.insitu = vm["insitu"].as<bool>();
   cfg.insitu_output_steps = vm["insitu-output-steps"].as<int>();
+  cfg.insitu_with_yaml = vm["insitu-with-yaml"].as<bool>();
   cfg.model_type = static_cast<ModelType>(vm["model-type"].as<int>());
   cfg.timestepping_type =
       static_cast<TimesteppingType>(vm["timestepping-type"].as<int>());
@@ -103,6 +105,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("output-steps", po::value<int>()->default_value(200), "Number of I/O output steps")
       ("insitu", po::value<bool>()->default_value(true), "Insitu visualisation")
       ("insitu-output-steps", po::value<int>()->default_value(50), "Number of insitu output steps")
+      ("insitu-with-yaml", po::value<bool>()->default_value(true), "Search for an ascent_actions.yaml file in mesh dir.")
       ("cg-tol", po::value<T>()->default_value(1e-8), "Tolerance of CG solver")
       ("cg-maxsteps", po::value<int>()->default_value(200), "Max number of CG iterations")
       ("nonlinear-tol", po::value<T>()->default_value(1e-10), "Tolerance of nonlinear solver")

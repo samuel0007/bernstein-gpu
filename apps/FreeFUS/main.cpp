@@ -57,7 +57,7 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
 
   if (config.insitu)
     freefus::setup_insitu(V_out, P, u_out, ascent_runner, conduit_mesh,
-                          ascent_actions);
+                          ascent_actions, config);
 
   auto model = freefus::create_model<ModelType::NonLinearLossyImplicit, T, U, P, Q, D>(
       spaces, material_coefficients, mesh_data, params, config.model_type);

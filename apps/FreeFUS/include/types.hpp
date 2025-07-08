@@ -34,6 +34,7 @@ enum class TimesteppingType : int {
 template <typename T> struct UserConfig {
   std::string mesh_name;
   std::string mesh_filepath;
+  std::string mesh_dir;
   std::string output_filepath;
 
   basix::element::lagrange_variant lvariant;
@@ -50,6 +51,7 @@ template <typename T> struct UserConfig {
 
   int output_steps;
   bool insitu;
+  bool insitu_with_yaml;
   int insitu_output_steps;
 
   double cg_tol;
