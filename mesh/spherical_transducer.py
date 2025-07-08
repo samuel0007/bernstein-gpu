@@ -3,20 +3,47 @@ import gmsh, math
 gmsh.initialize()
 gmsh.model.add("spherical_transducer")
 
-frequency = 0.5e6 # [Hz]
 
-materials_sound_speed = [1500, 2800] # [m/s]
+
+# BP3
+# frequency = 0.5e6 # [Hz]
+# materials_sound_speed = [1500, 2800] # [m/s]
+# Lcap = 0.03         # Length of the cap box [m]
+# layers_height = [0.0065, 0.0835]
+# layers_volume_markers = [2, 1]
+# elementsPerWavelength = 2.4 # [elements]
+# Rcurv = 0.064       # radius of curvature
+# A     = 0.064       # aperture diameter
+
+# BP3-small
+# frequency = 0.1e6 # [Hz]
+# materials_sound_speed = [1500, 2800] # [m/s]
+# Lcap = 0.03         # Length of the cap box [m]
+# layers_height = [0.0065, 0.0835]
+# layers_volume_markers = [2, 1]
+# elementsPerWavelength = 2.4 # [elements]
+# Rcurv = 0.064       # radius of curvature
+# A     = 0.064       # aperture diameter
+
+# BP4
+# frequency = 0.5e6 # [Hz]
+# # Water: 1, Skin: 2, Cortical: 3, Trabecular: 4, Brain: 5
+# materials_sound_speed = [1500, 1610, 2800, 2300, 1560] # [m/s]
+# Lcap = 0.026        # Length of the cap box [m]
+# layers_height = [0.004, 0.0015, 0.004, 0.001, 0.0835]
+# layers_volume_markers = [2, 3, 4, 3, 5]
+# elementsPerWavelength = 2.4 # [elements]
+# Rcurv = 0.064       # radius of curvature
+# A     = 0.064       # aperture diameter
+
+# BP4-small
+frequency = 0.1e6 # [Hz]
+# Water: 1, Skin: 2, Cortical: 3, Trabecular: 4, Brain: 5
+materials_sound_speed = [1500, 1610, 2800, 2300, 1560] # [m/s]
+Lcap = 0.026        # Length of the cap box [m]
+layers_height = [0.004, 0.0015, 0.004, 0.001, 0.0835]
+layers_volume_markers = [2, 3, 4, 3, 5]
 elementsPerWavelength = 2.4 # [elements]
-
-Lcap = 0.03         # Length of the cap box [m]
-layers_height = [0.0065, 0.0835]
-layers_volume_markers = [2, 1]
-
-# Parameters
-# Rcurv = 0.064         # radius of curvature
-# A     = 0.064         # aperture diameter
-# Lbox  = 0.120         # backing‐box length
-
 Rcurv = 0.064       # radius of curvature
 A     = 0.064       # aperture diameter
 

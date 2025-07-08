@@ -226,7 +226,8 @@ public:
                                             this->detJ_geom_d, "detJ_geom");
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out) {
+  template <typename Vector>
+  void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -241,29 +242,40 @@ public:
     mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
         in_dofs, out_dofs, this->alpha_d_span.data(),
         this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
-        this->phi_d_span.data());
+        this->phi_d_span.data(), global_coefficient);
     check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+  template <typename Vector>
+  void get_diag_inverse(Vector &diag_inv, U global_coefficient = 1.) {
     diag_inv.set(0.);
-    this->get_diag(diag_inv);
+    this->get_diag(diag_inv, global_coefficient);
     thrust::transform(thrust::device, diag_inv.array().begin(),
-                  diag_inv.array().begin() + diag_inv.map()->size_local(),
-                  diag_inv.mutable_array().begin(),
-                  [] __host__ __device__(T yi) { return 1.0 / yi; });
+                      diag_inv.array().begin() + diag_inv.map()->size_local(),
+                      diag_inv.mutable_array().begin(),
+                      [] __host__ __device__(T yi) { return 1.0 / yi; });
   }
-
-   template <typename Vector> void get_diag(Vector &diag) {
+ 
+  template <typename Vector> void get_diag(Vector &diag, U global_coefficient = 1.) {
     T *out_dofs = diag.mutable_array().data();
 
     dim3 grid_size(this->number_of_local_cells);
     dim3 block_size(nd);
     mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(
         out_dofs, this->alpha_d_span.data(), this->detJ_geom_d_span.data(),
-        this->dofmap_d_span.data(), this->phi_d_span.data());
+        this->dofmap_d_span.data(), this->phi_d_span.data(), global_coefficient);
     check_device_last_error();
   }
+
+  template <typename Vector> void set_coefficient(Vector &coeff) {
+    auto &coeff_tvector = coeff.thrust_vector();
+
+    assert(coeff_tvector.size() == alpha_d.size());
+    thrust::copy(coeff_tvector.begin(), coeff_tvector.end(), alpha_d.begin());
+  }
+
+  thrust::device_vector<T> &get_coefficient() { return alpha_d; }
+
 
 private:
   static constexpr int N = P + 1;

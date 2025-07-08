@@ -461,4 +461,29 @@ template <typename Vector> void inverse(Vector &x) {
                     [] __host__ __device__(T xi) { return 1.0 / xi; });
 }
 
+// r = x - y
+template <typename Vector> void diff(Vector &r, const Vector &x, const Vector &y) {
+  using T = typename Vector::value_type;
+  // Note: using .array() confuses thrust and it aliases the memory
+  // It's UB. 
+  thrust::transform(thrust::device, x.array().begin(),
+                    x.array().begin() + x.map()->size_local(),
+                    y.array().begin(),
+                    r.mutable_array().begin(),
+                    [] __host__ __device__(T xi, T yi) -> T { return xi - yi; });
+}
+
+// This computes the error norm (x - y)**2, using y as temporary buffer
+template <typename Vector> Vector::value_type errornorm(Vector &x, Vector &y) {
+  using T = typename Vector::value_type;
+  // Note: using .array() confuses thrust and it aliases the memory
+  // It's UB. 
+  thrust::transform(thrust::device, x.mutable_array().begin(),
+                    x.mutable_array().begin() + x.map()->size_local(),
+                    y.mutable_array().begin(),
+                    y.mutable_array().begin(),
+                    [] __host__ __device__(T xi, T yi) -> T { return (xi - yi) * (xi - yi); });
+  return inner_product(y, y);
+}
+
 } // namespace dolfinx::acc

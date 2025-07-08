@@ -10,6 +10,7 @@ template <typename T> struct Material {
   T sound_speed;
   T diffusivity;
   int domain_id;
+  T nonlinear_coefficient = 0;
 };
 
 template <typename T> struct WaterData {
@@ -42,6 +43,21 @@ template <typename T> struct TrabecularBoneData {
   static constexpr T diffusivity = 8;
 };
 
+template <typename T> struct NonlinearWaterData {
+  static constexpr T density = 1000;
+  static constexpr T sound_speed = 1480;
+  static constexpr T diffusivity = 0.2;
+  // static constexpr T diffusivity = 0.0;
+  static constexpr T nonlinear_coefficient = 3.5;
+};
+
+template <typename T> struct NonlinearLiverData {
+  static constexpr T density = 1060;
+  static constexpr T sound_speed = 1590;
+  static constexpr T diffusivity = 0;
+  static constexpr T nonlinear_coefficient = 4.4;
+};
+
 // Material Cases. Domain "1" has to be the domain where the source lies.
 template <typename T>
 std::vector<Material<T>> BP1Materials{{WaterData<T>::density,
@@ -49,11 +65,35 @@ std::vector<Material<T>> BP1Materials{{WaterData<T>::density,
                                        WaterData<T>::diffusivity, 1}};
 
 template <typename T>
-std::vector<Material<T>> BP2Materials{
+std::vector<Material<T>> BP3Materials{
     {WaterData<T>::density, WaterData<T>::sound_speed,
      WaterData<T>::diffusivity, 1},
     {TrabecularBoneData<T>::density, TrabecularBoneData<T>::sound_speed,
      TrabecularBoneData<T>::diffusivity, 2}};
+
+// Water: 1, Skin: 2, Cortical: 3, Trabecular: 4, Brain: 5
+template <typename T>
+std::vector<Material<T>> BP4Materials{
+    {WaterData<T>::density, WaterData<T>::sound_speed,
+     WaterData<T>::diffusivity, 1},
+    {SkinData<T>::density, SkinData<T>::sound_speed, SkinData<T>::diffusivity,
+     2},
+    {CorticalBoneData<T>::density, CorticalBoneData<T>::sound_speed,
+     CorticalBoneData<T>::diffusivity, 3},
+    {TrabecularBoneData<T>::density, TrabecularBoneData<T>::sound_speed,
+     TrabecularBoneData<T>::diffusivity, 4},
+    {BrainData<T>::density, BrainData<T>::sound_speed,
+     BrainData<T>::diffusivity, 5}};
+
+// Water: 1, Liver: 2
+template <typename T>
+std::vector<Material<T>> H101Materials{
+    {NonlinearWaterData<T>::density, NonlinearWaterData<T>::sound_speed,
+     NonlinearWaterData<T>::diffusivity, 1, NonlinearWaterData<T>::nonlinear_coefficient},
+    {NonlinearLiverData<T>::density, NonlinearLiverData<T>::sound_speed,
+     NonlinearLiverData<T>::diffusivity, 2, NonlinearLiverData<T>::nonlinear_coefficient},
+};
+    
 
 template <typename T>
 std::vector<Material<T>> getMaterialsData(MaterialCase material_case) {
@@ -61,7 +101,13 @@ std::vector<Material<T>> getMaterialsData(MaterialCase material_case) {
   case MaterialCase::BP1:
     return BP1Materials<T>;
   case MaterialCase::BP2:
-    return BP2Materials<T>;
+    return BP1Materials<T>;
+  case MaterialCase::BP3:
+    return BP3Materials<T>;
+  case MaterialCase::BP4:
+    return BP4Materials<T>;
+  case MaterialCase::H101:
+    return H101Materials<T>;
   }
   throw std::runtime_error("Invalid Material Case");
 };
@@ -77,6 +123,7 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
   auto c0 = std::make_shared<fem::Function<U>>(V_DG);
   auto rho0 = std::make_shared<fem::Function<U>>(V_DG);
   auto delta0 = std::make_shared<fem::Function<U>>(V_DG);
+  auto b0 = std::make_shared<fem::Function<U>>(V_DG);
 
   for (auto material : materials_data) {
     auto cells = mesh_data.cell_tags->find(material.domain_id);
@@ -103,12 +150,17 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
     std::span<U> delta0_ = delta0->x()->mutable_array();
     std::for_each(cells.begin(), cells.end(),
                   [&](std::int32_t &i) { delta0_[i] = material.diffusivity; });
+
+    std::span<U> b0_ = b0->x()->mutable_array();
+    std::for_each(cells.begin(), cells.end(),
+                  [&](std::int32_t &i) { b0_[i] = material.nonlinear_coefficient; });
   }
   rho0->x()->scatter_fwd();
   c0->x()->scatter_fwd();
   delta0->x()->scatter_fwd();
+  b0->x()->scatter_fwd();
 
-  return std::make_tuple(c0, rho0, delta0);
+  return std::make_tuple(c0, rho0, delta0, b0);
 };
 
 template <typename T> T get_source_sound_speed(MaterialCase material_case) {

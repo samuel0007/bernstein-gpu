@@ -12,22 +12,24 @@ MeshData<U> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
   auto coord_element = fem::CoordinateElement<double>(cell_type, 1);
 
   dolfinx::io::XDMFFile fmesh(comm, mesh_filepath, "r");
-  // auto base_mesh_p = std::make_shared<mesh::Mesh<U>>(
-  //   fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
+  auto base_mesh_p = std::make_shared<mesh::Mesh<U>>(
+    fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
   // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
   //     ghost_layer_mesh(*base_mesh_p, coord_element));
-  auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
-    fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
+  // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
+    // fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
 
-  const int tdim = mesh_ptr->topology()->dim();
-  mesh_ptr->topology()->create_connectivity(tdim - 1, tdim);
+  const int tdim = base_mesh_p->topology()->dim();
+  base_mesh_p->topology()->create_connectivity(tdim - 1, tdim);
 
   auto cell_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
-      fmesh.read_meshtags(*mesh_ptr, "Cell tags", std::nullopt));
+      fmesh.read_meshtags(*base_mesh_p, "Cell tags", std::nullopt));
   auto facet_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
-      fmesh.read_meshtags(*mesh_ptr, "Facet tags", std::nullopt));
+      fmesh.read_meshtags(*base_mesh_p, "Facet tags", std::nullopt));
+  auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
+      ghost_layer_mesh(*base_mesh_p, coord_element, cell_tags, facet_tags));
   
-  // assert(!cell_tags->indices().empty() && "No cell tags found");
+  assert(!cell_tags->indices().empty() && "No cell tags found");
   assert(!facet_tags->indices().empty() && "No facet tags found");
 
   auto local_cells = mesh_ptr->topology()->index_map(tdim)->size_local();

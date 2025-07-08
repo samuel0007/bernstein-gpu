@@ -14,18 +14,21 @@ enum class MaterialCase : int {
   BP4 = 4,
   BP5 = 5,
   BP6 = 6,
-  BP7 = 7
+  BP7 = 7,
+  H101 = 8,
 };
 
 enum class ModelType : int {
   LinearExplicit = 1,
   LinearImplicit = 2,
   LinearLossyImplicit = 3,
+  NonLinearLossyImplicit = 4,
 };
 
 enum class TimesteppingType : int {
   ExplicitRK4 = 1,
   Newmark = 2,
+  NonlinearNewmark = 3,
 };
 
 template <typename T> struct UserConfig {
@@ -51,6 +54,7 @@ template <typename T> struct UserConfig {
 
   double cg_tol;
   int cg_max_steps;
+  double nonlinear_tol;
 
   spdlog::level::level_enum log_level;
 };

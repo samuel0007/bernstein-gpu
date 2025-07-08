@@ -35,6 +35,8 @@ public:
     vi->set(0);
   };
 
+  void init(auto& model, auto& solver) {};
+
   /// Evolve a solution under a model using a solver for a timestep dt
   void evolve(auto &model, auto &solver, U t, U dt) {
     copy_d_to_d(*u, *u0);
@@ -110,6 +112,146 @@ private:
   }
 };
 
+template <typename U, typename Vector>
+class NonlinearNewmark {
+public:
+  NonlinearNewmark(std::shared_ptr<fem::FunctionSpace<U>> V,
+          const PhysicalParameters<U> &params, U source_sound_speed, U TOL = 1e-10)
+      : params(params), source_sound_speed(source_sound_speed) {
+
+    auto index_map = V->dofmap()->index_map;
+    auto bs = V->dofmap()->index_map_bs();
+    assert(bs == 1 && "not implemented");
+
+    TOL2 = TOL * TOL;
+
+    g = std::make_unique<Vector>(index_map, bs);
+    gd = std::make_unique<Vector>(index_map, bs);
+
+    
+    u = std::make_unique<Vector>(index_map, bs);
+    ud = std::make_unique<Vector>(index_map, bs);
+    udd = std::make_unique<Vector>(index_map, bs);
+    next_udd = std::make_unique<Vector>(index_map, bs);
+    delta_udd = std::make_unique<Vector>(index_map, bs);
+    R = std::make_unique<Vector>(index_map, bs);
+    
+    u->set(0);
+    ud->set(0);
+    udd->set(0);
+    delta_udd->set(0);    
+    R->set(0);    
+  };
+
+  void init(auto& model, auto& solver) {
+    // Could be helpful in the case of non zero ICs.
+    // model->init_coefficients(*u, *ud, *udd);
+  }
+
+  /// Evolve a solution under a model using a solver for a timestep dt
+  void evolve(auto &model, auto &solver, U t, U dt) {
+    delta_udd->set(0.);
+    next_udd->set(0.);
+    R->set(0.);
+
+    update_source(t + dt); // f(t + dt)
+    const U dt2 = dt * dt;
+    // Predictor
+    // 1. Displacement: u = u + ud * dt + udd * (0.5 - beta) * dt2;
+    acc::axpy(*u, dt, *ud, *u );
+    acc::axpy(*u, (0.5 - beta) * dt2, *udd, *u);
+    // 2. Velocity: ud = ud + udd * (1 - gamma) * dt;
+    acc::axpy(*ud, (1 - gamma) * dt, *udd, *ud);
+
+    model->set_dt(dt);
+    // Solve Nonlinear system of equations via newton iterations
+    int nonlinear_its = 0;
+    int linear_its = 0;
+
+    // compute initial residual
+    model->update_coefficients(*u, *ud, *udd);
+    model->residual(*u, *ud, *next_udd, *g, *gd, *R);
+    U residual_norm = acc::squared_norm(*R);
+
+    while(residual_norm > TOL2) {
+      delta_udd->set(0.);
+
+      // Solve for newtwon update -J delta_udd = R
+      int solver_its = solver->solve(*model, *delta_udd, *R, true);
+      
+      // 1. Displacement: u = u + delta_udd * beta * dt2
+      acc::axpy(*u, beta * dt2, *delta_udd, *u);
+      // 2. Velocity: ud = ud + delta_udd * gamma * dt
+      acc::axpy(*ud, gamma * dt, *delta_udd, *ud);
+      // 3. Acceleration: udd = udd + delta_udd
+      acc::axpy(*next_udd, 1, *delta_udd, *next_udd);
+
+      model->update_coefficients(*u, *ud, *udd);
+      model->residual(*u, *ud, *next_udd, *g, *gd, *R);
+      residual_norm = acc::squared_norm(*R);
+
+      spdlog::info("solver its={}, residual_norm={}", solver_its, std::sqrt(residual_norm));
+      linear_its += solver_its;
+      ++nonlinear_its;
+    }
+
+    acc::copy_d_to_d(*next_udd, *udd);
+    spdlog::info("non_linear its={}, total linear its={}", nonlinear_its, linear_its);
+  }
+
+  void get_solution(auto &solution) {
+    thrust::copy(u->thrust_vector().begin(), u->thrust_vector().end(),
+                 solution->x()->mutable_array().begin());
+  }
+
+private:
+  static constexpr U beta = 0.25;
+  static constexpr U gamma = 0.5;
+  U TOL2;
+
+  PhysicalParameters<U> params;
+  U source_sound_speed;
+
+  std::unique_ptr<Vector> g;
+  std::unique_ptr<Vector> gd;
+
+  std::unique_ptr<Vector> R;
+
+
+  std::unique_ptr<Vector> u;
+  std::unique_ptr<Vector> ud;
+  std::unique_ptr<Vector> udd;
+  std::unique_ptr<Vector> next_udd;
+  std::unique_ptr<Vector> delta_udd;
+
+
+  void update_source(U t) {
+    // Apply windowing
+    U window;
+    U dwindow;
+    if (t < params.period * params.window_length) {
+      window = 0.5 * (1.0 - cos(params.source_frequency * M_PI * t /
+                                params.window_length));
+      dwindow = 0.5 * M_PI * params.source_frequency / params.window_length *
+                sin(params.source_frequency * M_PI * t / params.window_length);
+    } else {
+      window = 1.0;
+      dwindow = 0.;
+    }
+
+    // Update boundary condition
+    const U w0 = params.source_angular_frequency;
+    const U p0 = params.source_amplitude;
+
+    const U source = window * p0 * w0 / source_sound_speed * cos(w0 * t);
+
+    const U dsource = dwindow * p0 * w0 / source_sound_speed * cos(w0 * t) -
+                      dwindow * p0 * w0 * w0 / source_sound_speed * sin(w0 * t);
+    g->set(source);
+    gd->set(dsource);
+  }
+};
+
 template <typename U, typename Vector, double beta = 0.25, double gamma = 0.5>
 class Newmark {
 public:
@@ -133,6 +275,8 @@ public:
     ud->set(0);
     udd->set(0);
   };
+
+  void init(auto& model, auto& solver) {};
 
   /// Evolve a solution under a model using a solver for a timestep dt
   void evolve(auto &model, auto &solver, U t, U dt) {
@@ -213,6 +357,8 @@ auto create_timestepper(std::shared_ptr<fem::FunctionSpace<U>> V,
     return std::make_unique<ExplicitRK4<U, Vector>>(V, params, c0);
   } else if constexpr (TS == TimesteppingType::Newmark) {
     return std::make_unique<Newmark<U, Vector>>(V, params, c0);
+  } else if constexpr (TS == TimesteppingType::NonlinearNewmark) {
+    return std::make_unique<NonlinearNewmark<U, Vector>>(V, params, c0, config.nonlinear_tol);
   } else {
     static_assert(always_false_v<TS>, "Unsupported timestepping type");
   }

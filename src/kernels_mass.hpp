@@ -171,7 +171,7 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
                                        const T *__restrict__ alpha_cells,
                                        const T *__restrict__ detJ_cells,
                                        const std::int32_t *__restrict__ dofmap,
-                                       const T *__restrict__ phi) {
+                                       const T *__restrict__ phi, T global_coefficient) {
   const int tx = threadIdx.x;
   const int cell_idx = blockIdx.x;
   int g_dof_idx = -1;
@@ -209,7 +209,7 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
 
     // if(cell_idx == 0)
     //   printf("out_dof[%d]=%f \n", g_dof_idx, fval);
-    atomicAdd(&out_dofs[g_dof_idx], fval);
+    atomicAdd(&out_dofs[g_dof_idx], fval * global_coefficient);
   }
 
   // printf("qvals[%d]=%f \n", tx, qval);
@@ -309,7 +309,7 @@ __global__ void mass_diagonal(T *__restrict__ out_dofs,
                               const T *__restrict__ alpha_cells,
                               const T *__restrict__ detJ_cells,
                               const std::int32_t *__restrict__ dofmap,
-                              const T *__restrict__ phi) {
+                              const T *__restrict__ phi, T global_coefficient) {
   const int tx = threadIdx.x;
   const int cell_idx = blockIdx.x;
   int g_dof_idx = dofmap[tx + nd * cell_idx];
@@ -321,7 +321,7 @@ __global__ void mass_diagonal(T *__restrict__ out_dofs,
     qval += phi_l * phi_l * detJ_cells[i + cell_idx * nq];
   }
 
-  atomicAdd(&out_dofs[g_dof_idx], qval * alpha);
+  atomicAdd(&out_dofs[g_dof_idx], qval * alpha * global_coefficient);
 }
 
 template <typename T, int Q> __constant__ T qwts2_d[Q];

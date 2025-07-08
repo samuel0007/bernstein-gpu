@@ -77,6 +77,7 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   }
   cfg.cg_tol = vm["cg-tol"].as<double>();
   cfg.cg_max_steps = vm["cg-maxsteps"].as<int>();
+  cfg.nonlinear_tol = vm["nonlinear-tol"].as<double>();
   cfg.window_length = vm["window-length"].as<double>();
 
   return cfg;
@@ -88,7 +89,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
-      ("mesh,m", po::value<std::string>()->default_value("spherical_2d"), "mesh folder name")
+      ("mesh,m", po::value<std::string>()->default_value("test_mesh"), "mesh folder name")
       ("output-path,o", po::value<std::string>()->default_value("output.bp"), "output path, must end in .bp")
       ("polynomial-basis", po::value<std::string>()->default_value("gll_warped"), "Polynomial basis: bernstein, gll_warped")
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
@@ -104,6 +105,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("insitu-output-steps", po::value<int>()->default_value(50), "Number of insitu output steps")
       ("cg-tol", po::value<T>()->default_value(1e-8), "Tolerance of CG solver")
       ("cg-maxsteps", po::value<int>()->default_value(200), "Max number of CG iterations")
+      ("nonlinear-tol", po::value<T>()->default_value(1e-10), "Tolerance of nonlinear solver")
       ("log-level", po::value<std::string>()->default_value("info"),
        "Log level: trace, debug, info, warn, err, critical, off");
   // clang-format on
