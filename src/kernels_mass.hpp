@@ -215,6 +215,62 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
   // printf("qvals[%d]=%f \n", tx, qval);
 }
 
+template <typename T, int nd, int nq>
+__global__ void nonlinearmass_operator_baseline(const T *__restrict__ in_dofs1,
+                                      const T *__restrict__ in_dofs2,
+                                       T *__restrict__ out_dofs,
+                                       const T *__restrict__ alpha_cells,
+                                       const T *__restrict__ detJ_cells,
+                                       const std::int32_t *__restrict__ dofmap,
+                                       const T *__restrict__ phi, T global_coefficient) {
+  const int tx = threadIdx.x;
+  const int cell_idx = blockIdx.x;
+  int g_dof_idx = -1;
+
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
+
+  __shared__ T in_local_dofs1[nd];
+  __shared__ T in_local_dofs2[nd];
+
+  __shared__ T qvals[nq];
+
+  if (tx < nd) {
+    g_dof_idx = dofmap[tx + nd * cell_idx];
+    in_local_dofs1[tx] = in_dofs1[g_dof_idx];
+    in_local_dofs2[tx] = in_dofs2[g_dof_idx];
+  }
+  __syncthreads();
+
+  // Load geometry data
+  T detJ_abs = detJ_cells[tx + cell_idx * nq];
+
+  // Compute u1_i(x_q) and u2_i(x_q)
+  T qval1 = 0.;
+  T qval2 = 0.;
+  for (int i = 0; i < nd; ++i) {
+    qval1 += phi[tx * nd + i] * in_local_dofs1[i];
+    qval2 += phi[tx * nd + i] * in_local_dofs2[i];
+  }
+ 
+  qvals[tx] = alpha * qval1 * qval2 * detJ_abs;
+  __syncthreads();
+  // if(cell_idx == 0)
+  //   printf("qvals[%d]=%f \n", tx, qvals[tx]);
+
+  if (tx < nd) {
+    T fval = 0.;
+    for (int i = 0; i < nq; ++i) {
+      fval += qvals[i] * phi[i * nd + tx];
+    }
+
+    // if(cell_idx == 0)
+    //   printf("out_dof[%d]=%f \n", g_dof_idx, fval);
+    atomicAdd(&out_dofs[g_dof_idx], fval * global_coefficient);
+  }
+
+  // printf("qvals[%d]=%f \n", tx, qval);
+}
+
 /// Compute the facets mass operator
 /// @param in_dofs input global dofs (x),   size ndofs
 /// @param out_dofs output global dofs (y), size ndofs
@@ -322,6 +378,28 @@ __global__ void mass_diagonal(T *__restrict__ out_dofs,
   }
 
   atomicAdd(&out_dofs[g_dof_idx], qval * alpha * global_coefficient);
+}
+
+template <typename T, int nd, int nq>
+__global__ void nonlinear_mass_diagonal(const T *__restrict__ in_dofs,
+                              T *__restrict__ out_dofs,
+                              const T *__restrict__ alpha_cells,
+                              const T *__restrict__ detJ_cells,
+                              const std::int32_t *__restrict__ dofmap,
+                              const T *__restrict__ phi, T global_coefficient) {
+  const int tx = threadIdx.x;
+  const int cell_idx = blockIdx.x;
+  int g_dof_idx = dofmap[tx + nd * cell_idx];
+  T alpha = alpha_cells[cell_idx]; // Load DG0 alpha coefficient
+  T in_local_dof = in_dofs[g_dof_idx];
+
+  T qval = 0.;
+  for (int i = 0; i < nq; ++i) {
+    T phi_l = phi[i * nd + tx];
+    qval += phi_l * phi_l * detJ_cells[i + cell_idx * nq];
+  }
+
+  atomicAdd(&out_dofs[g_dof_idx], qval * alpha * global_coefficient * in_local_dof);
 }
 
 template <typename T, int Q> __constant__ T qwts2_d[Q];

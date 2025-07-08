@@ -145,7 +145,7 @@ public:
 
   void init(auto& model, auto& solver) {
     // Could be helpful in the case of non zero ICs.
-    // model->init_coefficients(*u, *ud, *udd);
+    model->init_coefficients(*u, *ud, *udd);
   }
 
   /// Evolve a solution under a model using a solver for a timestep dt
@@ -169,24 +169,24 @@ public:
     int linear_its = 0;
 
     // compute initial residual
-    model->update_coefficients(*u, *ud, *udd);
+    model->update_coefficients(*u, *ud, *next_udd);
     model->residual(*u, *ud, *next_udd, *g, *gd, *R);
     U residual_norm = acc::squared_norm(*R);
 
     while(residual_norm > TOL2) {
       delta_udd->set(0.);
 
-      // Solve for newtwon update -J delta_udd = R
+      // Solve for newton update -J delta_udd = R
       int solver_its = solver->solve(*model, *delta_udd, *R, true);
       
+      // 0. Acceleration: udd = udd + delta_udd
+      acc::axpy(*next_udd, 1, *delta_udd, *next_udd);
       // 1. Displacement: u = u + delta_udd * beta * dt2
       acc::axpy(*u, beta * dt2, *delta_udd, *u);
       // 2. Velocity: ud = ud + delta_udd * gamma * dt
       acc::axpy(*ud, gamma * dt, *delta_udd, *ud);
-      // 3. Acceleration: udd = udd + delta_udd
-      acc::axpy(*next_udd, 1, *delta_udd, *next_udd);
-
-      model->update_coefficients(*u, *ud, *udd);
+      
+      model->update_coefficients(*u, *ud, *next_udd);
       model->residual(*u, *ud, *next_udd, *g, *gd, *R);
       residual_norm = acc::squared_norm(*R);
 
@@ -252,7 +252,7 @@ private:
   }
 };
 
-template <typename U, typename Vector, double beta = 0.25, double gamma = 0.5>
+template <typename U, typename Vector>
 class Newmark {
 public:
   Newmark(std::shared_ptr<fem::FunctionSpace<U>> V,

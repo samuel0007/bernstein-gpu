@@ -55,9 +55,13 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
   conduit::Node conduit_mesh;
   conduit::Node ascent_actions;
 
-  if (config.insitu)
+  if (config.insitu) {
     freefus::setup_insitu(V_out, P, u_out, ascent_runner, conduit_mesh,
                           ascent_actions, config);
+
+    // Initial material output
+    freefus::insitu_output_DG(material_coefficients, ascent_runner);
+  }
 
   auto model = freefus::create_model<ModelType::NonLinearLossyImplicit, T, U, P, Q, D>(
       spaces, material_coefficients, mesh_data, params, config.model_type);

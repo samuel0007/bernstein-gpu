@@ -267,14 +267,14 @@ public:
     check_device_last_error();
   }
 
-  template <typename Vector> void set_coefficient(Vector &coeff) {
-    auto &coeff_tvector = coeff.thrust_vector();
+  // template <typename Vector> void set_coefficient(Vector &coeff) {
+  //   auto &coeff_tvector = coeff.thrust_vector();
 
-    assert(coeff_tvector.size() == alpha_d.size());
-    thrust::copy(coeff_tvector.begin(), coeff_tvector.end(), alpha_d.begin());
-  }
+  //   assert(coeff_tvector.size() == alpha_d.size());
+  //   thrust::copy(coeff_tvector.begin(), coeff_tvector.end(), alpha_d.begin());
+  // }
 
-  thrust::device_vector<T> &get_coefficient() { return alpha_d; }
+  // thrust::device_vector<T> &get_coefficient() { return alpha_d; }
 
 
 private:
@@ -290,6 +290,168 @@ private:
 
   std::shared_ptr<mesh::Mesh<U>> mesh;
   std::shared_ptr<fem::FunctionSpace<U>> V;
+
+  thrust::device_vector<T> phi_d;
+  std::span<const T> phi_d_span;
+
+  thrust::device_vector<T> alpha_d;
+  std::span<const T> alpha_d_span;
+
+  thrust::device_vector<T> detJ_geom_d;
+  std::span<const T> detJ_geom_d_span;
+
+  thrust::device_vector<std::int32_t> dofmap_d;
+  std::span<const std::int32_t> dofmap_d_span;
+};
+
+
+/// Computes M(q)p
+template <typename T, int P, int Q, typename U = T>
+class NonlinearMatFreeMassBaseline3D {
+public:
+  using value_type = T;
+  using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
+
+  NonlinearMatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                        std::shared_ptr<fem::FunctionSpace<U>> V, U alpha)
+      : mesh(mesh), V(V) {
+    auto dofmap = V->dofmap();
+    auto map = dofmap->index_map;
+    int map_bs = dofmap->index_map_bs();
+    la::Vector<T> alpha_vec(map, map_bs);
+    alpha_vec.set(alpha);
+    init(alpha_vec.array());
+  }
+
+  NonlinearMatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                        std::shared_ptr<fem::FunctionSpace<U>> V,
+                        std::span<const U> alpha)
+      : mesh(mesh), V(V) {
+    init(alpha);
+  }
+
+  void init(std::span<const U> alpha) {
+    // auto [lcells, bcells] = compute_boundary_cells(V);
+    // spdlog::debug("#lcells = {}, #bcells = {}", lcells.size(),
+    // bcells.size());
+
+    auto element_p = this->V->element();
+
+    const std::size_t tdim = mesh->topology()->dim();
+    const std::size_t gdim = mesh->geometry().dim();
+    this->number_of_local_cells =
+        mesh->topology()->index_map(tdim)->size_local() +
+        mesh->topology()->index_map(tdim)->num_ghosts();
+    // Transfer V dofmap to the GPU
+    auto dofmap = V->dofmap();
+
+    this->dofmap_d_span =
+        copy_to_device(dofmap->map().data_handle(),
+                       dofmap->map().data_handle() + dofmap->map().size(),
+                       this->dofmap_d, "dofmap");
+    this->alpha_d_span =
+        copy_to_device(alpha.begin(), alpha.end(), this->alpha_d, "alpha");
+
+    // Construct quadrature points table
+    // auto [qpts, qwts] = basix::quadrature::make_quadrature<T>(
+    //     basix::quadrature::type::gauss_jacobi,
+    //     basix::cell::type::tetrahedron, basix::polyset::type::standard, 2 * Q
+    //     - 2);
+    auto [qpts, qwts] = basix::quadrature::make_quadrature<U>(
+        basix::quadrature::type::Default, basix::cell::type::tetrahedron,
+        basix::polyset::type::standard, 2 * Q - 2);
+
+    auto [phi_table, shape] =
+        element_p->tabulate(qpts, {qpts.size() / 3, 3}, 0);
+
+    std::cout << std::format("Table size = {}, qxn: {}x{}", phi_table.size(),
+                             shape[1], shape[2])
+              << std::endl;
+    assert(shape[0] == 1 && shape[3] == 1);
+    assert(nq == shape[1]);
+
+    this->phi_d_span =
+        copy_to_device(phi_table.begin(), phi_table.end(), this->phi_d, "phi");
+    std::cout << "Precomputing geometry..." << std::endl;
+    std::vector<U> detJ_geom = compute_geometry(mesh, qpts, qwts);
+
+    this->detJ_geom_d_span = copy_to_device(detJ_geom.begin(), detJ_geom.end(),
+                                            this->detJ_geom_d, "detJ_geom");
+
+    // Nonlinear coeff is a vector in V
+    coeff_d.resize(dofmap->index_map->size_local() + dofmap->index_map->num_ghosts());
+  }
+
+  template <typename Vector>
+  void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
+    in.scatter_fwd();
+
+    const T *in_dofs1 = in.array().data();
+    const T *in_dofs2 = thrust::raw_pointer_cast(coeff_d.data());
+
+    T *out_dofs = out.mutable_array().data();
+
+    assert(dofmap_d_span.size() == this->number_of_local_cells * nd);
+    assert(in.array().size() == out.mutable_array().size());
+    assert(detJ_geom_d_span.size() == this->number_of_local_cells * nq);
+
+    dim3 grid_size(this->number_of_local_cells);
+    dim3 block_size(nq);
+    nonlinearmass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
+        in_dofs1, in_dofs2, out_dofs, this->alpha_d_span.data(),
+        this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
+        this->phi_d_span.data(), global_coefficient);
+    check_device_last_error();
+  }
+
+  template <typename Vector>
+  void get_diag_inverse(Vector &diag_inv, U global_coefficient = 1.) {
+    diag_inv.set(0.);
+    this->get_diag(diag_inv, global_coefficient);
+    thrust::transform(thrust::device, diag_inv.array().begin(),
+                      diag_inv.array().begin() + diag_inv.map()->size_local(),
+                      diag_inv.mutable_array().begin(),
+                      [] __host__ __device__(T yi) { return 1.0 / yi; });
+  }
+ 
+  template <typename Vector> void get_diag(Vector &diag, U global_coefficient = 1.) {
+    T *out_dofs = diag.mutable_array().data();
+    const T *in_dofs = thrust::raw_pointer_cast(coeff_d.data());
+
+    dim3 grid_size(this->number_of_local_cells);
+    dim3 block_size(nd);
+    nonlinear_mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(in_dofs,
+        out_dofs, this->alpha_d_span.data(), this->detJ_geom_d_span.data(),
+        this->dofmap_d_span.data(), this->phi_d_span.data(), global_coefficient);
+    check_device_last_error();
+  }
+
+  template <typename Vector> void set_coefficient(Vector &coeff) {
+    auto &coeff_tvector = coeff.thrust_vector();
+
+    assert(coeff_tvector.size() == coeff_d.size());
+    thrust::copy(coeff_tvector.begin(), coeff_tvector.end(), coeff_d.begin());
+  }
+
+  thrust::device_vector<T> &get_coefficient() { return coeff_d; }
+
+
+private:
+  static constexpr int N = P + 1;
+  static constexpr int nd =
+      N * (N + 1) * (N + 2) /
+      6; // Number of dofs on tets (is always smaller than nq)
+  static constexpr int nq = 14 * (Q == 3) + 24 * (Q == 4) + 45 * (Q == 5) +
+                            74 * (Q == 6) + 122 * (Q == 7) + 177 * (Q == 8) +
+                            729 * (Q == 9) + 1000 * (Q == 10) +
+                            1331 * (Q == 11);
+  std::size_t number_of_local_cells;
+
+  std::shared_ptr<mesh::Mesh<U>> mesh;
+  std::shared_ptr<fem::FunctionSpace<U>> V;
+
+  thrust::device_vector<T> coeff_d;
+  std::span<const T> coeff_d_span;
 
   thrust::device_vector<T> phi_d;
   std::span<const T> phi_d_span;

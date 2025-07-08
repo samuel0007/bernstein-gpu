@@ -54,7 +54,7 @@ template <typename T> struct NonlinearWaterData {
 template <typename T> struct NonlinearLiverData {
   static constexpr T density = 1060;
   static constexpr T sound_speed = 1590;
-  static constexpr T diffusivity = 0;
+  static constexpr T diffusivity = 90;
   static constexpr T nonlinear_coefficient = 4.4;
 };
 
@@ -161,8 +161,9 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
               V_DG->mesh()->topology()->index_map(tdim)->size_global());
   spdlog::info("Cell count: {}", cell_count);
   assert(cell_count == V_DG->mesh()->topology()->index_map(tdim)->size_local());
-  rho0->x()->scatter_fwd();
+  
   c0->x()->scatter_fwd();
+  rho0->x()->scatter_fwd();
   delta0->x()->scatter_fwd();
   b0->x()->scatter_fwd();
 

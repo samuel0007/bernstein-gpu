@@ -92,7 +92,7 @@ std::vector<int> MeshRefTetrahedron(const int P) {
 }
 
 template <typename T>
-void MeshToBlueprintMesh(std::shared_ptr<fem::FunctionSpace<T>> V, conduit::Node &out) {
+void MeshToBlueprintMesh(std::shared_ptr<const fem::FunctionSpace<T>> V, conduit::Node &out) {
   // Topology: get connectivity array
   auto topology =  V->mesh()->topology();
   const int tdim = topology->dim();

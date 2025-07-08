@@ -17,7 +17,7 @@ MeshData<U> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
   // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
   //     ghost_layer_mesh(*base_mesh_p, coord_element));
   // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
-    // fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
+  //   fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
 
   const int tdim = base_mesh_p->topology()->dim();
   base_mesh_p->topology()->create_connectivity(tdim - 1, tdim);
@@ -26,8 +26,10 @@ MeshData<U> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
       fmesh.read_meshtags(*base_mesh_p, "Cell tags", std::nullopt));
   auto facet_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
       fmesh.read_meshtags(*base_mesh_p, "Facet tags", std::nullopt));
-  auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
-      ghost_layer_mesh(*base_mesh_p, coord_element, cell_tags, facet_tags));
+  // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
+  //     ghost_layer_mesh(*base_mesh_p, coord_element, cell_tags, facet_tags));
+  // mesh_ptr->topology()->create_connectivity(tdim - 1, tdim);
+  auto mesh_ptr = base_mesh_p;
   
   assert(!cell_tags->indices().empty() && "No cell tags found");
   assert(!facet_tags->indices().empty() && "No facet tags found");

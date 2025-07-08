@@ -99,3 +99,9 @@ template <typename T, typename U, int P, int Q, int D>
 using ExteriorMassAction =
     std::conditional_t<D == 2, acc::MatFreeMassExteriorBaseline<T, P, Q, U>,
                        acc::MatFreeMassExteriorBaseline3D<T, P, Q, U>>;
+
+// TODO in 2d
+template <typename T, typename U, int P, int Q, int D>
+using NonlinearMassAction =
+    std::conditional_t<D == 2, acc::NonlinearMatFreeMassBaseline3D<T, P, Q, U>,
+                       acc::NonlinearMatFreeMassBaseline3D<T, P, Q, U>>;

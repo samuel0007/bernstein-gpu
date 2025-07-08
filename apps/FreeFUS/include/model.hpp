@@ -265,8 +265,10 @@ template <typename T, typename U, int P, int Q, int D>
 class NonLinearLossyImplicit {
   using Func_ptr = std::shared_ptr<fem::Function<U>>;
   using MassAction = MassAction<T, U, P, Q, D>;
+  using NonlinearMassAction = NonlinearMassAction<T, U, P, Q, D>;
   using StiffnessAction = StiffnessAction<T, U, P, Q, D>;
   using ExteriorMassAction = ExteriorMassAction<T, U, P, Q, D>;
+
 
 public:
   /// @brief TODO this is not very dry. We could split "operator provider" and
@@ -289,7 +291,8 @@ public:
     std::span<U> b0_ = b0->x()->mutable_array();
     const int ncells = c0_.size();
 
-    alpha_Mp.resize(ncells);
+    // alpha_Mp.resize(ncells);
+    std::vector<U> alpha_Mp(ncells);
     std::vector<U> alpha_M(ncells);
     std::vector<U> alpha_Mgamma(ncells);
     std::vector<U> alpha_C(ncells);
@@ -300,7 +303,7 @@ public:
 
     for (std::size_t i = 0; i < ncells; ++i) {
       const U c02 = c0_[i] * c0_[i];
-      alpha_Mp[i] = -2. * b0_[i] / (rho0_[i] * c02 * c02);
+      alpha_Mp[i] = -2. * b0_[i] / (rho0_[i] * rho0_[i] * c02 * c02);
       alpha_M[i] = 1. / (rho0_[i] * c02);
       alpha_Mgamma[i] = delta0_[i] / (rho0_[i] * c02 * c0_[i]);
 
@@ -313,9 +316,9 @@ public:
       alpha_Fd[i] = delta0_[i] / (rho0_[i] * c02);
     }
 
-    Mp_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_Mp);
-    Mpdot_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_Mp);
-    Mp_jacobian_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_Mp);
+    Mp_action_ptr = std::make_unique<NonlinearMassAction>(mesh, V, alpha_Mp);
+    Mpdot_action_ptr = std::make_unique<NonlinearMassAction>(mesh, V, alpha_Mp);
+    Mpdotdot_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_Mp);
 
     M_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_M);
     Mgamma_action_ptr = std::make_unique<ExteriorMassAction>(
@@ -353,12 +356,16 @@ public:
   // - Jacobian:  - ((M+M_Γ) + (C+C_Γ)*gamma*dt + K*beta*dt2) @ in
   template <typename Vector> void operator()(Vector &in, Vector &out) {
     out.set(0.);
-    (*Mp_jacobian_action_ptr)(in, out);
+    // Linear Jacobian
     (*M_action_ptr)(in, out);
     (*Mgamma_action_ptr)(in, out);
     (*C_action_ptr)(in, out, gamma *m_dt);
     (*Cgamma_action_ptr)(in, out, gamma *m_dt);
     (*K_action_ptr)(in, out, beta *m_dt *m_dt);
+    // Nonlinear part
+    (*Mp_action_ptr)(in, out);
+    (*Mpdot_action_ptr)(in, out, 2 *gamma *m_dt);
+    (*Mpdotdot_action_ptr)(in, out, 2 *(beta *m_dt *m_dt + gamma*gamma *m_dt*m_dt));
   };
 
   // Note: I really dislike this interface.
@@ -367,81 +374,39 @@ public:
   // Get diagonal inverse of jacobian
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
     diag_inv.set(0.);
-    Mp_jacobian_action_ptr->get_diag(diag_inv);
     M_action_ptr->get_diag(diag_inv);
     Mgamma_action_ptr->get_diag(diag_inv);
     C_action_ptr->get_diag(diag_inv, gamma * m_dt);
     Cgamma_action_ptr->get_diag(diag_inv, gamma * m_dt);
     K_action_ptr->get_diag(diag_inv, beta * m_dt * m_dt);
+   
+    Mp_action_ptr->get_diag(diag_inv);
+    Mpdot_action_ptr->get_diag(diag_inv, 2 *gamma *m_dt);
+    Mpdotdot_action_ptr->get_diag(diag_inv, 2 *(beta *m_dt *m_dt + gamma*gamma *m_dt*m_dt));
     acc::inverse(diag_inv);
   }
 
   template <typename Vector>
   void init_coefficients(Vector &u, Vector &ud, Vector &udd) {
-    // Copy static coefficient to device
-    alpha_static_coeff_Mp.resize(alpha_Mp.size());
-    thrust::copy(alpha_Mp.begin(), alpha_Mp.end(),
-                 alpha_static_coeff_Mp.begin());
-
     update_coefficients(u, ud, udd);
   }
 
   template <typename Vector>
   void update_coefficients(Vector &u, Vector &ud, Vector &udd) {
-    // I wish the interface of the actions to only expose Vectors, and not
-    // thrust vectors
-    thrust::device_vector<T> &alpha_coeff_Mp = Mp_action_ptr->get_coefficient();
-    thrust::device_vector<T> &alpha_coeff_Mpdot =
-        Mpdot_action_ptr->get_coefficient();
-    thrust::device_vector<T> &alpha_coeff_Mp_jacobian =
-        Mp_jacobian_action_ptr->get_coefficient();
-
-    thrust::transform(thrust::device, alpha_static_coeff_Mp.begin(),
-                      alpha_static_coeff_Mp.end(), u.array().begin(),
-                      alpha_coeff_Mp.begin(),
-                      [] __host__ __device__(const T &alpha_i, const T &x_i) {
-                        return alpha_i * x_i;
-                      });
-
-    thrust::transform(thrust::device, alpha_static_coeff_Mp.begin(),
-                      alpha_static_coeff_Mp.end(), ud.array().begin(),
-                      alpha_coeff_Mpdot.begin(),
-                      [] __host__ __device__(const T &alpha_i, const T &x_i) {
-                        return alpha_i * x_i;
-                      });
-    auto dt = m_dt;
-
-    // Who knows why thrust doesnt provide with an operator overload through variadic templates?
-    auto first = thrust::make_zip_iterator(
-        thrust::make_tuple(alpha_static_coeff_Mp.begin(), u.array().begin(),
-                           ud.array().begin(), udd.array().begin()));
-    auto last = thrust::make_zip_iterator(
-        thrust::make_tuple(alpha_static_coeff_Mp.end(), u.array().end(),
-                           ud.array().end(), udd.array().end()));
-
-    thrust::transform(
-        thrust::device, first, last, alpha_coeff_Mp_jacobian.begin(),
-        [dt] __host__ __device__(thrust::tuple<T, T, T, T> t) {
-          T alpha_i = thrust::get<0>(t);
-          T u_i = thrust::get<1>(t);
-          T ud_i = thrust::get<2>(t);
-          T udd_i = thrust::get<3>(t);
-          // return alpha_i *
-          //        (u_i + 2 * gamma * dt * ud_i +
-          //         2 * ((beta * dt * dt) + (gamma * gamma * dt * dt)) * udd_i);
-          return alpha_i *
-                 (u_i + 2 * gamma * dt * ud_i +
-                  (beta * dt * dt) * udd_i);
-        });
+    Mp_action_ptr->set_coefficient(u);
+    Mpdot_action_ptr->set_coefficient(ud);
+    // Mpdotdot_action_ptr->set_coefficient(udd);
   }
 
 private:
   static constexpr U beta = 0.25;
   static constexpr U gamma = 0.5;
 
-  std::unique_ptr<MassAction> Mp_action_ptr;
-  std::unique_ptr<MassAction> Mpdot_action_ptr;
-  std::unique_ptr<MassAction> Mp_jacobian_action_ptr;
+  std::unique_ptr<NonlinearMassAction> Mp_action_ptr;
+  std::unique_ptr<NonlinearMassAction> Mpdot_action_ptr;
+  std::unique_ptr<MassAction> Mpdotdot_action_ptr;
+
+  // std::unique_ptr<MassAction> Mp_jacobian_action_ptr;
   std::unique_ptr<MassAction> M_action_ptr;
   std::unique_ptr<ExteriorMassAction> Mgamma_action_ptr;
   std::unique_ptr<StiffnessAction> C_action_ptr;
@@ -451,8 +416,8 @@ private:
   std::unique_ptr<ExteriorMassAction> Fd_action_ptr;
 
   // I'm not a fan of this interface
-  std::vector<U> alpha_Mp;
-  thrust::device_vector<T> alpha_static_coeff_Mp;
+  // std::vector<U> alpha_Mp;
+  // thrust::device_vector<T> alpha_static_coeff_Mp;
 
   double m_dt;
 };
@@ -517,7 +482,7 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
   // std::cout << std::format("Domain {}: {}\n", 2, facet_domain.size() / 2);
   // facet_domains.push_back(facet_domain);
 
-  auto [rho0, c0, delta0, b0] = material_coefficients;
+  auto [c0, rho0, delta0, b0] = material_coefficients;
 
   if constexpr (MT == ModelType::LinearExplicit) {
     return std::make_unique<LinearExplicit<T, U, P, Q, D>>(
