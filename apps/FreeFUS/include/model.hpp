@@ -428,7 +428,8 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
                   const PhysicalParameters<U> &params, ModelType model_type) {
 
   std::vector<std::vector<std::int32_t>> facet_domains;
-  std::vector<int> ft_unique = {1, 2};
+  // std::vector<int> ft_unique = {1, 2};
+  std::vector<int> ft_unique = {2};
   const std::vector<std::int32_t> bfacets = mesh::exterior_facet_indices(*(mesh_data.mesh->topology()));
   for (int i = 0; i < ft_unique.size(); ++i) {
     int tag = ft_unique[i];
@@ -447,17 +448,28 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
     2); facet_domains.push_back(facet_domain);
   }
 
-  // TODO
-  // std::vector<std::int32_t> facets1 =
-  //     mesh::locate_entities_boundary(*mesh_data.mesh, 2, [](auto x) {
-  //       std::vector<std::int8_t> marker(x.extent(1), false);
-  //       for (std::size_t p = 0; p < x.extent(1); ++p) {
-  //         auto x0 = x(2, p);
-  //         if (x0 > -0.002)
-  //           marker[p] = true;
-  //       }
-  //       return marker;
-  //     });
+  // TODO: this is a hacky fix as facet tags don't work in parallel with a vertex ghost mesh (see ghost layer functiomn)
+  // s = Rcurv - math.sqrt(Rcurv**2 - a**2) # Height of cap
+  const U Rcurv = 0.064;
+  const U a = 0.032;
+  const U s = Rcurv - std::sqrt(Rcurv * Rcurv - a * a);
+
+  std::vector<std::int32_t> facets1 =
+      mesh::locate_entities_boundary(*mesh_data.mesh, 2, [s](auto x) {
+        std::vector<std::int8_t> marker(x.extent(1), false);
+        for (std::size_t p = 0; p < x.extent(1); ++p) {
+          auto x0 = x(2, p);
+          if (x0 < s)
+            marker[p] = true;
+        }
+        return marker;
+      });
+
+  std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
+      fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
+      facets1);
+  std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
+  facet_domains.push_back(facet_domain);
 
   // std::vector<std::int32_t> facets2 =
   //     mesh::locate_entities_boundary(*mesh_data.mesh, 2, [](auto x) {

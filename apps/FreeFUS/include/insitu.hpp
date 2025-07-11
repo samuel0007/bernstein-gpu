@@ -11,8 +11,7 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
                   int polynomial_degree,
                   const std::shared_ptr<fem::Function<T>> &solution,
                   ascent::Ascent &ascent_runner, conduit::Node &conduit_mesh,
-                  conduit::Node &ascent_actions,
-                  const UserConfig<T>& config,
+                  conduit::Node &ascent_actions, const UserConfig<T> &config,
                   const std::string &field_name = "u") {
   const int tdim = V->mesh()->topology()->dim();
   ascent_h::MeshToBlueprintMesh(V, polynomial_degree, conduit_mesh);
@@ -27,7 +26,7 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
   conduit::Node ascent_opts;
 
   ascent_opts["default_dir"] = config.mesh_dir;
-  ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
+  // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
   ascent_runner.open(ascent_opts);
 
   conduit::Node scenes;
@@ -54,8 +53,6 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
     scenes["s3/plots/p1/field"] = field_name;
     scenes["s3/plots/p1/pipeline"] = "pl4";
 
-
-
     // scenes["s1/plots/p2/type"] = "mesh";
     scenes["s1/image_prefix"] = field_name;
 
@@ -70,7 +67,6 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
     pipelines["pl4/f1/params/field"] = field_name;
     pipelines["pl4/f1/params/iso_values"] = {-10000, 10000};
 
-    
     // {
     //   auto &params = pipelines["pl4/f1/params"];
     //   auto &point = params["point"];
@@ -159,23 +155,89 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
   add_scenes["action"] = "add_scenes";
   add_scenes["scenes"] = scenes;
 
-  if(!config.insitu_with_yaml){
+  if (!config.insitu_with_yaml) {
     spdlog::info("Ascent actions {}", ascent_actions.to_yaml());
   }
 }
 
 void insitu_output_DG(auto material_coefficients,
-                    ascent::Ascent &ascent_runner) {
+                      ascent::Ascent &ascent_runner) {
   auto [c0, rho0, delta0, b0] = material_coefficients;
   conduit::Node conduit_mesh;
   conduit::Node ascent_actions;
-  
+
   ascent_h::MeshToBlueprintMesh(c0->function_space(), conduit_mesh);
   ascent_h::DG0FunctionToBlueprintField(c0, conduit_mesh, "c0");
   ascent_h::DG0FunctionToBlueprintField(rho0, conduit_mesh, "rho0");
   ascent_h::DG0FunctionToBlueprintField(delta0, conduit_mesh, "delta0");
   ascent_h::DG0FunctionToBlueprintField(b0, conduit_mesh, "b0");
-  
+
+  conduit::Node pipelines;
+  pipelines["pl1/f1/type"] = "slice";
+  pipelines["pl2/f1/type"] = "slice";
+  pipelines["pl3/f1/type"] = "slice";
+
+  // pipelines["pl4/f1/type"] = "clip_with_field";
+
+  // pipelines["pl4/f1/type"] = "contour";
+  // pipelines["pl4/f1/params/iso_values"] = 1850.;
+  // pipelines["pl4/f1/params/field"] = "rho0";
+  // pipelines["pl4/f1/params/clip_value"] = 1850.;
+  // pipelines["pl4/f1/params/invert"] = "true";
+
+
+  // {
+  //   auto &params = pipelines["pl4/f1/params"];
+  //   auto &point = params["point"];
+  //   point["x_offset"] = 0.0;
+  //   point["y_offset"] = 0.0;
+  //   point["z_offset"] = 0.0;
+
+  //   auto &normal = params["normal"];
+  //   normal["x"] = 0.0;
+  //   normal["y"] = 1.0;
+  //   normal["z"] = 0.0;
+  // }
+
+  {
+    auto &params = pipelines["pl1/f1/params"];
+    auto &point = params["point"];
+    point["x_offset"] = 0.0;
+    point["y_offset"] = 0.0;
+    point["z_offset"] = 0.0;
+
+    auto &normal = params["normal"];
+    normal["x"] = 0.0;
+    normal["y"] = 1.0;
+    normal["z"] = 0.0;
+  }
+
+  {
+    auto &params = pipelines["pl2/f1/params"];
+    auto &point = params["point"];
+    point["x_offset"] = 0.0;
+    point["y_offset"] = 0.0;
+    point["z_offset"] = 0.0;
+
+    auto &normal = params["normal"];
+    normal["x"] = 0.0;
+    normal["y"] = 0.0;
+    normal["z"] = 1.0;
+  }
+
+  {
+    auto &params = pipelines["pl3/f1/params"];
+    auto &point = params["point"];
+    point["x_offset"] = 0.0;
+    point["y_offset"] = 0.0;
+    point["z_offset"] = 0.0;
+
+    auto &normal = params["normal"];
+    normal["x"] = 1.0;
+    normal["y"] = 0.0;
+    normal["z"] = 0.0;
+  }
+
   conduit::Node scenes;
   scenes["s1/plots/p1/type"] = "pseudocolor";
   scenes["s1/plots/p1/field"] = "c0";
@@ -183,27 +245,57 @@ void insitu_output_DG(auto material_coefficients,
   scenes["s1/renders/r1/camera/azimuth"] = 20.0;
   scenes["s1/renders/r1/camera/elevation"] = 40.0;
 
-  scenes["s2/plots/p1/type"] = "pseudocolor";
-  scenes["s2/plots/p1/field"] = "rho0";
-  scenes["s2/renders/r1/image_prefix"] = "materialrho0";
-  scenes["s2/renders/r1/camera/azimuth"] = 20.0;
-  scenes["s2/renders/r1/camera/elevation"] = 40.0;
+  double vec3[3];
+  vec3[0] = 1.; vec3[1] = 0.; vec3[2] = 0.;
+  scenes["s2/plots/p4/type"] = "volume";
+  scenes["s2/plots/p4/field"] = "rho0";
+  // scenes["s2/plots/p4/color_table/annotation"] = "false";
+  scenes["s2/renders/r1/image_prefix"] = "materialrho01";
+  scenes["s2/renders/r1/camera/azimuth"] = 15.0;
+  scenes["s2/renders/r1/camera/elevation"] = 5.0;
+  scenes["s2/renders/r1/camera/up"].set_float64_ptr(vec3,3);
+  scenes["s2/renders/r1/world_annotations"] = "false";
+  scenes["s2/renders/r1/screen_annotations"] = "false";
+
+
+  // scenes["s2/plots/p1/type"] = "pseudocolor";
+  // scenes["s2/plots/p1/field"] = "rho0";
+  // scenes["s2/plots/p1/pipeline"] = "pl4";
+  // scenes["s2/plots/p1/type"] = "pseudocolor";
+  // scenes["s2/plots/p1/field"] = "rho0";
+  // scenes["s2/plots/p1/pipeline"] = "pl1";
+  // scenes["s2/plots/p2/type"] = "pseudocolor";
+  // scenes["s2/plots/p2/field"] = "rho0";
+  // scenes["s2/plots/p2/pipeline"] = "pl2";
+  // scenes["s2/plots/p2/color_table/annotation"] = "false";
+  // scenes["s2/plots/p3/type"] = "pseudocolor";
+  // scenes["s2/plots/p3/field"] = "rho0";
+  // scenes["s2/plots/p3/pipeline"] = "pl3";
+  // scenes["s2/plots/p3/color_table/annotation"] = "false";
 
   scenes["s3/plots/p1/type"] = "pseudocolor";
   scenes["s3/plots/p1/field"] = "delta0";
   scenes["s3/renders/r1/image_prefix"] = "materialdelta0";
-  scenes["s3/renders/r1/camera/azimuth"] = 20.0;
+  scenes["s3/renders/r1/camera/azimuth"] = 180.0;
   scenes["s3/renders/r1/camera/elevation"] = 40.0;
+  scenes["s3/renders/r1/camera/up"].set_float64_ptr(vec3,3);
+
 
   scenes["s4/plots/p1/type"] = "pseudocolor";
   scenes["s4/plots/p1/field"] = "b0";
   scenes["s4/renders/r1/image_prefix"] = "materialb0";
   scenes["s4/renders/r1/camera/azimuth"] = 20.0;
   scenes["s4/renders/r1/camera/elevation"] = 40.0;
+  scenes["s4/renders/r1/camera/up"].set_float64_ptr(vec3,3);
+
 
   conduit::Node &add_scenes = ascent_actions.append();
   add_scenes["action"] = "add_scenes";
   add_scenes["scenes"] = scenes;
+
+  conduit::Node &add_pipelines = ascent_actions.append();
+  add_pipelines["action"] = "add_pipelines";
+  add_pipelines["pipelines"] = pipelines;
 
   ascent_runner.publish(conduit_mesh);
   ascent_runner.execute(ascent_actions);

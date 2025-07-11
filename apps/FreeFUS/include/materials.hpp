@@ -26,13 +26,15 @@ template <typename T> struct SkinData {
 };
 
 template <typename T> struct BrainData {
-  static constexpr T density = 1040;
+  static constexpr T density = 2300;
+  // static constexpr T density = 1040;
   static constexpr T sound_speed = 1560;
   static constexpr T diffusivity = 0.3;
 };
 
 template <typename T> struct CorticalBoneData {
-  static constexpr T density = 1850;
+  // static constexpr T density = 1850;
+  static constexpr T density = 1400;
   static constexpr T sound_speed = 2800;
   static constexpr T diffusivity = 4;
 };
@@ -89,11 +91,23 @@ std::vector<Material<T>> BP4Materials{
 template <typename T>
 std::vector<Material<T>> H101Materials{
     {NonlinearWaterData<T>::density, NonlinearWaterData<T>::sound_speed,
-     NonlinearWaterData<T>::diffusivity, 1, NonlinearWaterData<T>::nonlinear_coefficient},
+     NonlinearWaterData<T>::diffusivity, 1,
+     NonlinearWaterData<T>::nonlinear_coefficient},
     {NonlinearLiverData<T>::density, NonlinearLiverData<T>::sound_speed,
-     NonlinearLiverData<T>::diffusivity, 2, NonlinearLiverData<T>::nonlinear_coefficient},
+     NonlinearLiverData<T>::diffusivity, 2,
+     NonlinearLiverData<T>::nonlinear_coefficient},
 };
-    
+
+// Water: 1, Cortical Bone: 2, Brain: 3
+template <typename T>
+std::vector<Material<T>> SkullMaterials{
+    {WaterData<T>::density, WaterData<T>::sound_speed,
+     WaterData<T>::diffusivity, 1},
+    {CorticalBoneData<T>::density, CorticalBoneData<T>::sound_speed,
+     CorticalBoneData<T>::diffusivity, 2},
+    {BrainData<T>::density, BrainData<T>::sound_speed,
+     BrainData<T>::diffusivity, 3},
+};
 
 template <typename T>
 std::vector<Material<T>> getMaterialsData(MaterialCase material_case) {
@@ -108,6 +122,8 @@ std::vector<Material<T>> getMaterialsData(MaterialCase material_case) {
     return BP4Materials<T>;
   case MaterialCase::H101:
     return H101Materials<T>;
+  case MaterialCase::Skull:
+    return SkullMaterials<T>;
   }
   throw std::runtime_error("Invalid Material Case");
 };
@@ -151,17 +167,18 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
                   [&](std::int32_t &i) { delta0_[i] = material.diffusivity; });
 
     std::span<U> b0_ = b0->x()->mutable_array();
-    std::for_each(cells.begin(), cells.end(),
-                  [&](std::int32_t &i) { b0_[i] = material.nonlinear_coefficient; });
+    std::for_each(cells.begin(), cells.end(), [&](std::int32_t &i) {
+      b0_[i] = material.nonlinear_coefficient;
+    });
   }
   const int tdim = V_DG->mesh()->topology()->dim();
   spdlog::info("Cells: local={}, ghost={}, total={}",
-              V_DG->mesh()->topology()->index_map(tdim)->size_local(),
-              V_DG->mesh()->topology()->index_map(tdim)->num_ghosts(),
-              V_DG->mesh()->topology()->index_map(tdim)->size_global());
+               V_DG->mesh()->topology()->index_map(tdim)->size_local(),
+               V_DG->mesh()->topology()->index_map(tdim)->num_ghosts(),
+               V_DG->mesh()->topology()->index_map(tdim)->size_global());
   spdlog::info("Cell count: {}", cell_count);
   assert(cell_count == V_DG->mesh()->topology()->index_map(tdim)->size_local());
-  
+
   c0->x()->scatter_fwd();
   rho0->x()->scatter_fwd();
   delta0->x()->scatter_fwd();

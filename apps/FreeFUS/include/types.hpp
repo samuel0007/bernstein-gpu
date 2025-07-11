@@ -16,6 +16,7 @@ enum class MaterialCase : int {
   BP6 = 6,
   BP7 = 7,
   H101 = 8,
+  Skull = 9,
 };
 
 enum class ModelType : int {
