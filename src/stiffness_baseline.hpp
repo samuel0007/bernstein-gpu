@@ -75,7 +75,7 @@ public:
     assert(geom_d.size() == this->number_of_local_cells * 3 * nq);
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -89,11 +89,11 @@ public:
         <<<grid_size, block_size>>>(
             out_dofs, in_dofs, this->alpha_d_span.data(),
             this->geom_d_span.data(), this->dofmap_d_span.data(),
-            this->dphi_d_span.data());
+            this->dphi_d_span.data(), global_coefficient);
     check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+  template <typename Vector> void get_diag_inverse(Vector &diag_inv,  U global_coefficient = 1.) {
     assert(false && "todo for jacobi preconditioning of cg");
   }
 

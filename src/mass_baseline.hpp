@@ -91,7 +91,7 @@ public:
                                             this->detJ_geom_d, "detJ_geom");
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out) {
+  template <typename Vector> void operator()(Vector &in, Vector &out, T global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -106,11 +106,11 @@ public:
     mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
         in_dofs, out_dofs, this->alpha_d_span.data(),
         this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
-        this->phi_d_span.data());
+        this->phi_d_span.data(), global_coefficient);
     check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+  template <typename Vector> void get_diag_inverse(Vector &diag_inv, T global_coefficient = 1.) {
     diag_inv.set(0.);
     T *out_dofs = diag_inv.mutable_array().data();
 
@@ -118,7 +118,7 @@ public:
     dim3 block_size(nd);
     mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(
         out_dofs, this->alpha_d_span.data(), this->detJ_geom_d_span.data(),
-        this->dofmap_d_span.data(), this->phi_d_span.data());
+        this->dofmap_d_span.data(), this->phi_d_span.data(), global_coefficient);
 
     thrust::transform(thrust::device, diag_inv.array().begin(),
                       diag_inv.array().begin() + diag_inv.map()->size_local(),

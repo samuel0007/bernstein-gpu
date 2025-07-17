@@ -1,0 +1,9 @@
+--------------------------------------------------------------------------
+prterun was unable to launch the specified application as it lacked
+permissions to execute an executable:
+
+   Executable: build/mat_free_stiffness3D
+   Node: c-24-08
+
+while attempting to start process rank 0.
+--------------------------------------------------------------------------

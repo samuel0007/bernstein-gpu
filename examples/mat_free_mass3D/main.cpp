@@ -8,14 +8,14 @@
 #include <dolfinx.h>
 #include <dolfinx/common/types.h>
 #include <dolfinx/fem/Constant.h>
-#include <memory>
 #include <format>
+#include <memory>
 #include <petscsystypes.h>
 
 #include "src/geometry.hpp"
 #include "src/mass.hpp"
-#include "src/mass_sf.hpp"
 #include "src/mass_baseline.hpp"
+#include "src/mass_sf.hpp"
 #include "src/mesh.hpp"
 #include "src/quadrature.hpp"
 #include "src/util.hpp"
@@ -40,8 +40,7 @@ static_assert(false)
 #define POLYNOMIAL_DEGREE 4
 #endif
 
-po::variables_map get_cli_config(int argc, char *argv[])
-{
+po::variables_map get_cli_config(int argc, char *argv[]) {
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
@@ -62,8 +61,7 @@ po::variables_map get_cli_config(int argc, char *argv[])
 }
 
 template <std::floating_point T>
-void solver(MPI_Comm comm, po::variables_map vm)
-{
+void solver(MPI_Comm comm, po::variables_map vm) {
   constexpr int polynomial_degree = POLYNOMIAL_DEGREE;
   // BP1: p + 2 quadrature points
   // constexpr int quadrature_points = polynomial_degree + 2;
@@ -89,11 +87,11 @@ void solver(MPI_Comm comm, po::variables_map vm)
       basix::element::lagrange_variant::unset,
       basix::element::dpc_variant::unset, true);
 
-  auto V = std::make_shared<fem::FunctionSpace<T>>(
-      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
+  auto V = std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
+      mesh, std::make_shared<const fem::FiniteElement<T>>(element)));
 
-  auto V_DG = std::make_shared<fem::FunctionSpace<T>>(
-      fem::create_functionspace(mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
+  auto V_DG = std::make_shared<fem::FunctionSpace<T>>(fem::create_functionspace(
+      mesh, std::make_shared<const fem::FiniteElement<T>>(element_DG)));
 
   auto alpha = std::make_shared<fem::Function<T>>(V_DG);
   alpha->x()->set(1.0);
@@ -154,118 +152,112 @@ void solver(MPI_Comm comm, po::variables_map vm)
 
   // for (int j = 0; j < 10; ++j)
   // {
-    // std::cout << "j=" << j << "\n";
-    for (double i = 0; i < ndofs_local; ++i)
-    {
-      x.mutable_array()[i] = sin(i / ndofs_local);
-      // x.mutable_array()[i] = 1.;
-      // x.mutable_array()[i] = 0;
-    }
-    // x.mutable_array()[j] = 1.;
+  // std::cout << "j=" << j << "\n";
+  for (double i = 0; i < ndofs_local; ++i) {
+    // x.mutable_array()[i] = sin(i / ndofs_local);
+    x.mutable_array()[i] = 1.;
+    // x.mutable_array()[i] = 0;
+  }
+  // x.mutable_array()[j] = 1.;
 
-  
-    x_d.copy_from_host(x);
-    std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
+  x_d.copy_from_host(x);
+  std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
-    {
-      auto start = std::chrono::high_resolution_clock::now();
-      for (int i = 0; i < nreps; ++i)
-      {
-        y_d.set(0);
-        gpu_action_baseline(x_d, y_d);
-      }
-      auto stop = std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> duration = stop - start;
-      std::cout << "Baseline Mat-free Matvec time: " << duration.count()
-                << std::endl;
-      std::cout << "Baseline Mat-free action Gdofs/s: "
-                << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-    }
-    {
-      auto start = std::chrono::high_resolution_clock::now();
-      for (int i = 0; i < nreps; ++i)
-      {
-        y_d.set(0);
-        gpu_action_sf(x_d, y_d);
-      }
-      auto stop = std::chrono::high_resolution_clock::now();
-      std::chrono::duration<double> duration = stop - start;
-      std::cout << "SF Mat-free Matvec time: " << duration.count()
-                << std::endl;
-      std::cout << "SF Mat-free action Gdofs/s: "
-                << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-    }
-  // }
   {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i) {
       y_d.set(0);
-      gpu_action(x_d, y_d);
+      gpu_action_baseline(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
-    std::cout << "SF OTF Mat-free Matvec time: " << duration.count() << std::endl;
-    std::cout << "SF OTF Mat-free action Gdofs/s: "
+    std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+              << std::endl;
+    std::cout << "Baseline Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
-
-  // std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
-
-  // if (matrix_comparison && std::is_same_v<T, PetscScalar>) {
-  // Action of the bilinear form "a" on a function ui
-  // auto ui = std::make_shared<fem::Function<T>>(V);
-  // auto M = std::make_shared<fem::Form<T>>(
-  //     fem::create_form<T>(*form_mat_free_mass3D_M, {V},
-  //                         {{"ui", ui}, {"alpha", alpha}}, {}, {}, {}));
-
-  //   la::Vector<T> y_h(map, map_bs);
-  //   thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
-  //                y_h.mutable_array().begin());
-
-  //   // ----------- 2. CPU Matrix Free setup -----------
-  //   auto coeff = fem::allocate_coefficient_storage(*M);
-  //   std::vector<T> constants = fem::pack_constants(*M);
-
-  //   // Create function for computing the action of A on x (y = Ax)
-  //   auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
-  //     y.set(0.0);
-
-  //     // Update coefficient ui (just copy data from x to ui)
-  //     std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
-
-  //     // Compute action of A on x
-  //     fem::pack_coefficients(*M, coeff);
-  //     fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
-  //                          fem::make_coefficients_span(coeff));
-
-  //     // // Accumulate ghost values
-  //     // y.scatter_rev(std::plus<T>());
-
-  //     // // Update ghost values
-  //     // y.scatter_fwd();
-  //   };
-
-  //   la::Vector<T> y(map, map_bs);
-  //   y.set(0.);
-  //   std::cout << "norm(x)=" << la::norm(x) << "\n";
-  //   cpu_action(x, y);
-  //   std::cout << "norm(y)=" << la::norm(y) << "\n";
-  //   double eps = 1e-6;
-  //   bool check = true;
-  //   for (int i = 0; i < ndofs_local; ++i) {
-  //     // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i,
-  //     // y.array()[i], i, y_h.array()[i]);
-  //     if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
-  //       check = false;
-  //     }
+  {
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < nreps; ++i) {
+      y_d.set(0);
+      gpu_action_sf(x_d, y_d);
+    }
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = stop - start;
+    std::cout << "SF Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "SF Mat-free action Gdofs/s: "
+              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  }
+  // {
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (int i = 0; i < nreps; ++i) {
+  //     y_d.set(0);
+  //     gpu_action(x_d, y_d);
   //   }
-  //   std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   std::chrono::duration<double> duration = stop - start;
+  //   std::cout << "SF OTF Mat-free Matvec time: " << duration.count() <<
+  //   std::endl; std::cout << "SF OTF Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) <<
+  //             std::endl;
   // }
+
+  std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
+
+  if (matrix_comparison && std::is_same_v<T, PetscScalar>) {
+    // Action of the bilinear form "a" on a function ui
+    auto ui = std::make_shared<fem::Function<T>>(V);
+    auto M = std::make_shared<fem::Form<T>>(
+        fem::create_form<T>(*form_mat_free_mass3D_M, {V},
+                            {{"ui", ui}, {"alpha", alpha}}, {}, {}, {}));
+
+    la::Vector<T> y_h(map, map_bs);
+    thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
+                 y_h.mutable_array().begin());
+
+    // ----------- 2. CPU Matrix Free setup -----------
+    auto coeff = fem::allocate_coefficient_storage(*M);
+    std::vector<T> constants = fem::pack_constants(*M);
+
+    // Create function for computing the action of A on x (y = Ax)
+    auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
+      y.set(0.0);
+
+      // Update coefficient ui (just copy data from x to ui)
+      std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
+
+      // Compute action of A on x
+      fem::pack_coefficients(*M, coeff);
+      fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
+                           fem::make_coefficients_span(coeff));
+
+      // // Accumulate ghost values
+      // y.scatter_rev(std::plus<T>());
+
+      // // Update ghost values
+      // y.scatter_fwd();
+    };
+
+    la::Vector<T> y(map, map_bs);
+    y.set(0.);
+    std::cout << "norm(x)=" << la::norm(x) << "\n";
+    cpu_action(x, y);
+    std::cout << "norm(y)=" << la::norm(y) << "\n";
+    double eps = 1e-6;
+    bool check = true;
+    for (int i = 0; i < ndofs_local; ++i) {
+      // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i,
+      // y.array()[i], i, y_h.array()[i]);
+      if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
+        check = false;
+      }
+    }
+    std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
+  }
 }
 
 /// Main program
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   init_logging(argc, argv);
   MPI_Init(&argc, &argv);
   {

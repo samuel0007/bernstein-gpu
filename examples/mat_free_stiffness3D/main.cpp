@@ -7,16 +7,16 @@
 #include <dolfinx.h>
 #include <dolfinx/common/types.h>
 #include <dolfinx/fem/Constant.h>
-#include <format>
 #include <dolfinx/io/XDMFFile.h>
+#include <format>
 #include <memory>
 #include <petscsystypes.h>
-
 
 #include "src/geometry.hpp"
 #include "src/mesh.hpp"
 #include "src/quadrature.hpp"
 #include "src/stiffness_baseline.hpp"
+#include "src/stiffness_sf.hpp"
 #include "src/util.hpp"
 #include "src/vector.hpp"
 
@@ -70,14 +70,15 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
-  // auto mesh = std::make_shared<mesh::Mesh<T>>(mesh::create_box<T>(
-  //     comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}}, {nelements, nelements,
-  //     nelements}, mesh::CellType::tetrahedron,
-  //     mesh::create_cell_partitioner(mesh::GhostMode::none)));
-  auto coord_element = fem::CoordinateElement<T>(mesh::CellType::tetrahedron, 1);
-  io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf", "r");
-  auto mesh = std::make_shared<mesh::Mesh<T>>(fmesh.read_mesh(
-      coord_element, mesh::GhostMode::none, "mesh"));
+  auto mesh = std::make_shared<mesh::Mesh<T>>(mesh::create_box<T>(
+      comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}}, {nelements, nelements,
+      nelements}, mesh::CellType::tetrahedron,
+      mesh::create_cell_partitioner(mesh::GhostMode::none)));
+  // auto coord_element =
+  //     fem::CoordinateElement<T>(mesh::CellType::tetrahedron, 1);
+  // io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf", "r");
+  // auto mesh = std::make_shared<mesh::Mesh<T>>(
+  //     fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
   auto element = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::tetrahedron,
       polynomial_degree, basix::element::lagrange_variant::bernstein,
@@ -142,8 +143,10 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   }
 
   // ----------- 2. GPU Matrix Free setup -----------
-  acc::MatFreeStiffness3D<T, polynomial_degree, quadrature_points>
-      gpu_action_baseline(mesh, V, alpha->x()->array());
+  // acc::MatFreeStiffness3D<T, polynomial_degree, quadrature_points>
+  //     gpu_action_baseline(mesh, V, alpha->x()->array());
+  acc::MatFreeStiffnessSF3D<T, polynomial_degree, quadrature_points>
+      gpu_action_sf(mesh, V, alpha->x()->array());
 
   // ----------- 3. Matrix Free apply -----------
 
@@ -152,8 +155,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   la::Vector<T> &x = *(ui->x());
 
   for (double i = 0; i < ndofs_local; ++i) {
-    x.mutable_array()[i] = sin(i / ndofs_local);
-    // x.mutable_array()[i] = 1.;
+    // x.mutable_array()[i] = sin(i / ndofs_local);
+    x.mutable_array()[i] = 1.;
   }
 
   // GPU
@@ -163,33 +166,33 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   x_d.copy_from_host(x);
   std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
+  // {
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (int i = 0; i < nreps; ++i) {
+  //     y_d.set(0);
+  //     gpu_action_baseline(x_d, y_d);
+  //   }
+  //   device_synchronize();
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   std::chrono::duration<double> duration = stop - start;
+  //   std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+  //             << std::endl;
+  //   std::cout << "Baseline Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  // }
   {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i) {
       y_d.set(0);
-      gpu_action_baseline(x_d, y_d);
+      gpu_action_sf(x_d, y_d);
     }
+    device_synchronize();
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
-    std::cout << "Baseline Mat-free Matvec time: " << duration.count()
-              << std::endl;
-    std::cout << "Baseline Mat-free action Gdofs/s: "
+    std::cout << "SF Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "SF Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
-  // {
-  //     auto start = std::chrono::high_resolution_clock::now();
-  //     for (int i = 0; i < nreps; ++i)
-  //     {
-  //         gpu_action_sf(x_d, y_d);
-  //     }
-  //     auto stop = std::chrono::high_resolution_clock::now();
-  //     std::chrono::duration<double> duration = stop - start;
-  //     std::cout << "SF Mat-free Matvec time: " << duration.count()
-  //               << std::endl;
-  //     std::cout << "SF Mat-free action Gdofs/s: "
-  //               << ndofs_global * nreps / (1e9 * duration.count()) <<
-  //               std::endl;
-  // }
   // {
   //     auto start = std::chrono::high_resolution_clock::now();
   //     for (int i = 0; i < nreps; ++i)
@@ -206,56 +209,56 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   // std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
-  if (matrix_comparison && std::is_same_v<T, PetscScalar>) {
-    // Action of the bilinear form "a" on a function ui
-    auto M = std::make_shared<fem::Form<T>>(
-        fem::create_form<T>(*form_mat_free_stiffness3D_M, {V},
-                            {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
+  // if (matrix_comparison && std::is_same_v<T, PetscScalar>) {
+  //   // Action of the bilinear form "a" on a function ui
+  //   auto M = std::make_shared<fem::Form<T>>(
+  //       fem::create_form<T>(*form_mat_free_stiffness3D_M, {V},
+  //                           {{"ui", ui}, {"alpha", alpha}}, {{}}, {}, {}));
 
-    la::Vector<T> y_h(map, map_bs);
-    thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
-                 y_h.mutable_array().begin());
+  //   la::Vector<T> y_h(map, map_bs);
+  //   thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
+  //                y_h.mutable_array().begin());
 
-    // ----------- 2. CPU Matrix Free setup -----------
-    auto coeff = fem::allocate_coefficient_storage(*M);
-    std::vector<T> constants = fem::pack_constants(*M);
+  //   // ----------- 2. CPU Matrix Free setup -----------
+  //   auto coeff = fem::allocate_coefficient_storage(*M);
+  //   std::vector<T> constants = fem::pack_constants(*M);
 
-    // Create function for computing the action of A on x (y = Ax)
-    auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
-      y.set(0.0);
+  //   // Create function for computing the action of A on x (y = Ax)
+  //   auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
+  //     y.set(0.0);
 
-      // Update coefficient ui (just copy data from x to ui)
-      std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
+  //     // Update coefficient ui (just copy data from x to ui)
+  //     std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
 
-      // Compute action of A on x
-      fem::pack_coefficients(*M, coeff);
-      fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
-                           fem::make_coefficients_span(coeff));
+  //     // Compute action of A on x
+  //     fem::pack_coefficients(*M, coeff);
+  //     fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
+  //                          fem::make_coefficients_span(coeff));
 
-      // // Accumulate ghost values
-      // y.scatter_rev(std::plus<T>());
+  //     // // Accumulate ghost values
+  //     // y.scatter_rev(std::plus<T>());
 
-      // // Update ghost values
-      // y.scatter_fwd();
-    };
+  //     // // Update ghost values
+  //     // y.scatter_fwd();
+  //   };
 
-    la::Vector<T> y(map, map_bs);
-    y.set(0.);
-    std::cout << "norm(x)=" << la::norm(x) << "\n";
-    cpu_action(x, y);
-    std::cout << "norm(y)=" << la::norm(y) << "\n";
-    double eps = 1e-15;
-    bool check = true;
-    for (int i = 0; i < ndofs_local; ++i) {
-      if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
-        // std::cout << std::format("y={}, y_h={}\n", y.array()[i],
-        //                          y_h.array()[i]);
-        check = false;
-        break;
-      }
-    }
-    std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
-  }
+  //   la::Vector<T> y(map, map_bs);
+  //   y.set(0.);
+  //   std::cout << "norm(x)=" << la::norm(x) << "\n";
+  //   cpu_action(x, y);
+  //   std::cout << "norm(y)=" << la::norm(y) << "\n";
+  //   double eps = 1e-15;
+  //   bool check = true;
+  //   for (int i = 0; i < ndofs_local; ++i) {
+  //     if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
+  //       // std::cout << std::format("y={}, y_h={}\n", y.array()[i],
+  //       //                          y_h.array()[i]);
+  //       check = false;
+  //       break;
+  //     }
+  //   }
+  //   std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
+  // }
 }
 
 /// Main program

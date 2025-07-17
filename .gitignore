@@ -4,6 +4,7 @@
 *.bp
 *.png
 *.pyc
+*.msh
 
 
 *.ncu-rep

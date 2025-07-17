@@ -666,7 +666,7 @@ __launch_bounds__(Q *Q) __global__
                           const T *__restrict__ phi_0_N) {
   auto triangle_ij = [](auto i, auto j) {
     return (i + j + 1) * (i + j) / 2 + j;
-  }; // Maps 2d grid to triangle: TODO think about ordering
+  }; // Maps 2d grid to triangle
 
   const int tx = threadIdx.x;
   const int ty = threadIdx.y;
@@ -751,7 +751,7 @@ __launch_bounds__(Q *Q) __global__
   }
   __syncthreads();
 
-  // 3.1 f1[N][Q] -> f2[Q][Q]
+  // 3.1 f1[N][Q] -> f2[N][N]
   // ty := alpha1, tx := alpha2
   {
     if (ty < N && tx < N) {
@@ -790,8 +790,7 @@ __launch_bounds__(Q *Q *Q) __global__ void mass_operator3D_sf(
     int w = i + j + k;
     int s = j + k;
     return (w + 2) * (w + 1) * w / 6 + (s + 1) * s / 2 + k;
-  }; // Maps 3d grid to tet using twice the cantor pairing function: TODO think
-     // about ordering
+  }; // Maps 3d grid to tet using twice the cantor pairing function
 
   const int tx = threadIdx.x;
   const int ty = threadIdx.y;

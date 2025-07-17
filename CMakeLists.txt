@@ -6,7 +6,7 @@ option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
 set(polynomial_degree 4 CACHE STRING "Polynomial degree")
-set(scalar_type "float64" CACHE STRING "Scalar type")
+set(scalar_type "float32" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 message(STATUS "Scalar type: ${scalar_type}")
 

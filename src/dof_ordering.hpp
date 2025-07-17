@@ -5,6 +5,21 @@
 
 using namespace dolfinx;
 
+template <typename T>
+std::vector<T> permute_columns(std::vector<T> table,
+                               std::vector<int> reordering, int Q) {
+  int n = reordering.size();
+  assert(table.size() == Q * n);
+  std::vector<T> out(Q * n);
+  for (int q = 0; q < Q; ++q) {
+    int row_offset = q * n;
+    for (int i = 0; i < n; ++i) {
+      out[row_offset + reordering[i]] = table[row_offset + i];
+    }
+  }
+  return out;
+}
+
 /// Function that takes in a simplex bernstein element, and returns a reordering
 /// dofmap
 template <int P, typename T>

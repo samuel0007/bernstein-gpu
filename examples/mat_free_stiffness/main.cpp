@@ -7,15 +7,16 @@
 #include <dolfinx.h>
 #include <dolfinx/common/types.h>
 #include <dolfinx/fem/Constant.h>
+#include <dolfinx/io/XDMFFile.h>
 #include <format>
 #include <memory>
 #include <petscsystypes.h>
-#include <dolfinx/io/XDMFFile.h>
 
 #include "src/geometry.hpp"
 #include "src/mesh.hpp"
 #include "src/quadrature.hpp"
 #include "src/stiffness_baseline.hpp"
+#include "src/stiffness_sf.hpp"
 #include "src/util.hpp"
 #include "src/vector.hpp"
 
@@ -140,8 +141,10 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   //     mesh, V, alpha->x()->array());
   // acc::MatFreeMass<T, polynomial_degree, quadrature_points> gpu_action(
   //     mesh, V, alpha->x()->array());
-  acc::MatFreeStiffness<T, polynomial_degree, quadrature_points>
-      gpu_action_baseline(mesh, V, alpha->x()->array());
+  // acc::MatFreeStiffness<T, polynomial_degree, quadrature_points>
+  //     gpu_action_baseline(mesh, V, alpha->x()->array());
+  acc::MatFreeStiffnessSF<T, polynomial_degree, quadrature_points>
+      gpu_action_sf(mesh, V, alpha->x()->array());
 
   // ----------- 3. Matrix Free apply -----------
 
@@ -150,8 +153,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   la::Vector<T> &x = *(ui->x());
 
   for (double i = 0; i < ndofs_local; ++i) {
-    x.mutable_array()[i] = sin(i / ndofs_local);
-    // x.mutable_array()[i] = 1.;
+    // x.mutable_array()[i] = sin(i / ndofs_local);
+    x.mutable_array()[i] = 1.;
   }
 
   // GPU
@@ -161,33 +164,31 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   x_d.copy_from_host(x);
   std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
+  // {
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (int i = 0; i < nreps; ++i) {
+  //     y_d.set(0);
+  //     gpu_action_baseline(x_d, y_d);
+  //   }
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   std::chrono::duration<double> duration = stop - start;
+  //   std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+  //             << std::endl;
+  //   std::cout << "Baseline Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  // }
   {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i) {
       y_d.set(0);
-      gpu_action_baseline(x_d, y_d);
+      gpu_action_sf(x_d, y_d);
     }
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
-    std::cout << "Baseline Mat-free Matvec time: " << duration.count()
-              << std::endl;
-    std::cout << "Baseline Mat-free action Gdofs/s: "
+    std::cout << "SF Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "SF Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
-  // {
-  //     auto start = std::chrono::high_resolution_clock::now();
-  //     for (int i = 0; i < nreps; ++i)
-  //     {
-  //         gpu_action_sf(x_d, y_d);
-  //     }
-  //     auto stop = std::chrono::high_resolution_clock::now();
-  //     std::chrono::duration<double> duration = stop - start;
-  //     std::cout << "SF Mat-free Matvec time: " << duration.count()
-  //               << std::endl;
-  //     std::cout << "SF Mat-free action Gdofs/s: "
-  //               << ndofs_global * nreps / (1e9 * duration.count()) <<
-  //               std::endl;
-  // }
   // {
   //     auto start = std::chrono::high_resolution_clock::now();
   //     for (int i = 0; i < nreps; ++i)
@@ -242,7 +243,7 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::cout << "norm(x)=" << la::norm(x) << "\n";
     cpu_action(x, y);
     std::cout << "norm(y)=" << la::norm(y) << "\n";
-    double eps = 1e-6;
+    double eps = 1e-10;
     bool check = true;
     for (int i = 0; i < ndofs_local; ++i) {
       if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {

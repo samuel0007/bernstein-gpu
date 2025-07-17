@@ -10,20 +10,7 @@
 
 namespace dolfinx::acc {
 
-template <typename T>
-std::vector<T> permute_columns(std::vector<T> table,
-                               std::vector<int> reordering, int Q) {
-  int n = reordering.size();
-  assert(table.size() == Q * n);
-  std::vector<T> out(Q * n);
-  for (int q = 0; q < Q; ++q) {
-    int row_offset = q * n;
-    for (int i = 0; i < n; ++i) {
-      out[row_offset + reordering[i]] = table[row_offset + i];
-    }
-  }
-  return out;
-}
+
 
 template <typename T, int P, int Q> class MatFreeMassSF {
 public:
@@ -93,19 +80,19 @@ public:
 
     // Create 1D elements
     std::array<std::shared_ptr<basix::FiniteElement<T>>, P + 1>
-        elems; // No default ctor
+    elems; // No default ctor
     std::array<std::vector<int>, P + 1> reordering_N;
     for (int p = 0; p < P + 1; ++p) {
       elems[p] =
-          std::make_shared<basix::FiniteElement<T>>(basix::create_element<T>(
-              basix::element::family::P, basix::cell::type::interval, p,
-              basix::element::lagrange_variant::bernstein,
-              basix::element::dpc_variant::unset, (p == 0)));
-      reordering_N[p] = get_tp_ordering1D<T>(elems[p], p);
-    }
-
-    // As basix doesnt expose dof reodering for bernstein, we do it manually.
-
+      std::make_shared<basix::FiniteElement<T>>(basix::create_element<T>(
+        basix::element::family::P, basix::cell::type::interval, p,
+        basix::element::lagrange_variant::bernstein,
+        basix::element::dpc_variant::unset, (p == 0)));
+        reordering_N[p] = get_tp_ordering1D<T>(elems[p], p);
+      }
+      
+      
+      // As basix doesnt expose dof reodering for bernstein, we do it manually.
     auto [phi_1, shape_1] = elems[P]->tabulate(0, qpts1, {qpts1.size(), 1});
     std::cout << std::format("phi_1 size = {}, qxn: {}x{}", phi_1.size(),
                              shape_1[1], shape_1[2])
@@ -115,7 +102,7 @@ public:
 
     std::vector<T> phi_0_N(
         N * Q * N,
-        0.); // this could be more memory efficient (2x), but indexing?
+        0.); // this could be more memory efficient (2x in 2D), but costly indexing?
     for (int p = 0; p < N; ++p) {
       auto [phi_0_p, shape_0_p] =
           elems[p]->tabulate(0, qpts0, {qpts0.size(), 1});
