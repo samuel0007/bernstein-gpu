@@ -429,6 +429,35 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
 
   std::vector<std::vector<std::int32_t>> facet_domains;
   // std::vector<int> ft_unique = {1, 2};
+
+
+  // TODO: this is a hacky fix as facet tags don't work in parallel with a vertex ghost mesh (see ghost layer functiomn)
+  // s = Rcurv - math.sqrt(Rcurv**2 - a**2) # Height of cap
+  const U Rcurv = 0.064;
+  const U a = 0.032;
+  const U s = Rcurv - std::sqrt(Rcurv * Rcurv - a * a);
+  const U TOL = 1e-6; 
+
+  std::vector<std::int32_t> facets1 =
+      mesh::locate_entities_boundary(*mesh_data.mesh, 2, [s, a, TOL](auto x) {
+        std::vector<std::int8_t> marker(x.extent(1), false);
+        for (std::size_t p = 0; p < x.extent(1); ++p) {
+          auto x0 = x(0, p);
+          auto y0 = x(1, p);
+          auto z0 = x(2, p);
+
+          if (z0 < (s + TOL) && (x0 * x0 + y0 * y0) < (a * a + TOL * TOL))
+            marker[p] = true;
+        }
+        return marker;
+      });
+
+  std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
+      fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
+      facets1);
+  std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
+  facet_domains.push_back(facet_domain);
+
   std::vector<int> ft_unique = {2};
   const std::vector<std::int32_t> bfacets = mesh::exterior_facet_indices(*(mesh_data.mesh->topology()));
   for (int i = 0; i < ft_unique.size(); ++i) {
@@ -447,29 +476,6 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
     std::cout << std::format("Domain {}: {}\n", tag, facet_domain.size() /
     2); facet_domains.push_back(facet_domain);
   }
-
-  // TODO: this is a hacky fix as facet tags don't work in parallel with a vertex ghost mesh (see ghost layer functiomn)
-  // s = Rcurv - math.sqrt(Rcurv**2 - a**2) # Height of cap
-  const U Rcurv = 0.064;
-  const U a = 0.032;
-  const U s = Rcurv - std::sqrt(Rcurv * Rcurv - a * a);
-
-  std::vector<std::int32_t> facets1 =
-      mesh::locate_entities_boundary(*mesh_data.mesh, 2, [s](auto x) {
-        std::vector<std::int8_t> marker(x.extent(1), false);
-        for (std::size_t p = 0; p < x.extent(1); ++p) {
-          auto x0 = x(2, p);
-          if (x0 < s)
-            marker[p] = true;
-        }
-        return marker;
-      });
-
-  std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
-      fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
-      facets1);
-  std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
-  facet_domains.push_back(facet_domain);
 
   // std::vector<std::int32_t> facets2 =
   //     mesh::locate_entities_boundary(*mesh_data.mesh, 2, [](auto x) {

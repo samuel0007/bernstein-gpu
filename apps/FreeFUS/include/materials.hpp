@@ -26,15 +26,15 @@ template <typename T> struct SkinData {
 };
 
 template <typename T> struct BrainData {
-  static constexpr T density = 2300;
-  // static constexpr T density = 1040;
+  static constexpr T density = 1040;
+  // static constexpr T density = 2300;
   static constexpr T sound_speed = 1560;
   static constexpr T diffusivity = 0.3;
 };
 
 template <typename T> struct CorticalBoneData {
-  // static constexpr T density = 1850;
-  static constexpr T density = 1400;
+  static constexpr T density = 1850;
+  // static constexpr T density = 1400;
   static constexpr T sound_speed = 2800;
   static constexpr T diffusivity = 4;
 };
@@ -151,8 +151,8 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
     // std::iota(cells.begin(), cells.end(), 0);
 
     spdlog::info(
-        "Material domain id {}, sounds speed {}, density {}, #cells {}",
-        material.domain_id, material.sound_speed, material.density,
+        "Material domain id {}, sounds speed {}, density {}, nonlinaer coeff: {}, #cells {}",
+        material.domain_id, material.sound_speed, material.density, material.nonlinear_coefficient,
         cells.size());
     std::span<U> c0_ = c0->x()->mutable_array();
     std::for_each(cells.begin(), cells.end(),
@@ -177,7 +177,9 @@ auto create_materials_coefficients(std::shared_ptr<fem::FunctionSpace<U>> V_DG,
                V_DG->mesh()->topology()->index_map(tdim)->num_ghosts(),
                V_DG->mesh()->topology()->index_map(tdim)->size_global());
   spdlog::info("Cell count: {}", cell_count);
-  assert(cell_count == V_DG->mesh()->topology()->index_map(tdim)->size_local());
+  if(cell_count != V_DG->mesh()->topology()->index_map(tdim)->size_local()) {
+    throw std::runtime_error("invalid material setup. Mismatched number of tagged cells and local cells.");
+  };
 
   c0->x()->scatter_fwd();
   rho0->x()->scatter_fwd();

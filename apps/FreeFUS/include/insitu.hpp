@@ -26,7 +26,7 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
   conduit::Node ascent_opts;
 
   ascent_opts["default_dir"] = config.mesh_dir;
-  // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
+  ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
   ascent_runner.open(ascent_opts);
 
   conduit::Node scenes;
@@ -247,31 +247,30 @@ void insitu_output_DG(auto material_coefficients,
 
   double vec3[3];
   vec3[0] = 1.; vec3[1] = 0.; vec3[2] = 0.;
-  scenes["s2/plots/p4/type"] = "volume";
-  scenes["s2/plots/p4/field"] = "rho0";
+  // scenes["s2/plots/p4/type"] = "volume";
+  // scenes["s2/plots/p4/field"] = "rho0";
   // scenes["s2/plots/p4/color_table/annotation"] = "false";
   scenes["s2/renders/r1/image_prefix"] = "materialrho01";
-  scenes["s2/renders/r1/camera/azimuth"] = 15.0;
-  scenes["s2/renders/r1/camera/elevation"] = 5.0;
+  scenes["s2/renders/r1/camera/azimuth"] = 20.0;
+  scenes["s2/renders/r1/camera/elevation"] = 10.0;
   scenes["s2/renders/r1/camera/up"].set_float64_ptr(vec3,3);
   scenes["s2/renders/r1/world_annotations"] = "false";
   scenes["s2/renders/r1/screen_annotations"] = "false";
 
-
-  // scenes["s2/plots/p1/type"] = "pseudocolor";
-  // scenes["s2/plots/p1/field"] = "rho0";
-  // scenes["s2/plots/p1/pipeline"] = "pl4";
-  // scenes["s2/plots/p1/type"] = "pseudocolor";
-  // scenes["s2/plots/p1/field"] = "rho0";
-  // scenes["s2/plots/p1/pipeline"] = "pl1";
-  // scenes["s2/plots/p2/type"] = "pseudocolor";
-  // scenes["s2/plots/p2/field"] = "rho0";
-  // scenes["s2/plots/p2/pipeline"] = "pl2";
-  // scenes["s2/plots/p2/color_table/annotation"] = "false";
-  // scenes["s2/plots/p3/type"] = "pseudocolor";
-  // scenes["s2/plots/p3/field"] = "rho0";
-  // scenes["s2/plots/p3/pipeline"] = "pl3";
-  // scenes["s2/plots/p3/color_table/annotation"] = "false";
+  scenes["s2/plots/p1/type"] = "pseudocolor";
+  scenes["s2/plots/p1/field"] = "rho0";
+  scenes["s2/plots/p1/pipeline"] = "pl4";
+  scenes["s2/plots/p1/type"] = "pseudocolor";
+  scenes["s2/plots/p1/field"] = "rho0";
+  scenes["s2/plots/p1/pipeline"] = "pl1";
+  scenes["s2/plots/p2/type"] = "pseudocolor";
+  scenes["s2/plots/p2/field"] = "rho0";
+  scenes["s2/plots/p2/pipeline"] = "pl2";
+  scenes["s2/plots/p2/color_table/annotation"] = "false";
+  scenes["s2/plots/p3/type"] = "pseudocolor";
+  scenes["s2/plots/p3/field"] = "rho0";
+  scenes["s2/plots/p3/pipeline"] = "pl3";
+  scenes["s2/plots/p3/color_table/annotation"] = "false";
 
   scenes["s3/plots/p1/type"] = "pseudocolor";
   scenes["s3/plots/p1/field"] = "delta0";

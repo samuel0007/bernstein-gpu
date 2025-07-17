@@ -12,9 +12,9 @@ enum class MaterialCase : int {
   BP2 = 2,
   BP3 = 3,
   BP4 = 4,
-  BP5 = 5,
-  BP6 = 6,
-  BP7 = 7,
+  // BP5 = 5,
+  // BP6 = 6,
+  // BP7 = 7,
   H101 = 8,
   Skull = 9,
 };

@@ -97,6 +97,7 @@ void MeshToBlueprintMesh(std::shared_ptr<const fem::FunctionSpace<T>> V, conduit
   auto topology =  V->mesh()->topology();
   const int tdim = topology->dim();
   std::vector<int> conn = topology->connectivity(tdim, 0)->array();
+  std::cout << "local cells in insitu output: " << conn.size() / 4 << std::endl;
 
   // Geometry: get coordinates
   std::span<const T> coords = V->mesh()->geometry().x();
@@ -122,6 +123,15 @@ void MeshToBlueprintMesh(std::shared_ptr<const fem::FunctionSpace<T>> V, conduit
         "Unknown cell type in dolfinx_celltype_to_blueprint mapping");
   out["topologies/mesh/elements/shape"] = it->second;
   out["topologies/mesh/elements/connectivity"].set(conn.data(), conn.size());
+
+  Node verify_info;
+  if(!blueprint::mesh::verify(out, verify_info))
+  {
+      std::cout << "Mesh Verify failed!" << std::endl;
+      std::cout << verify_info.to_yaml() << std::endl;
+  } else {
+      std::cout << "Mesh verify success!" << std::endl;
+  }
 }
 
 template <typename T>
@@ -178,6 +188,15 @@ void MeshToBlueprintMesh(std::shared_ptr<fem::FunctionSpace<T>> V, const int P,
 
   out["topologies/mesh/elements/connectivity"].set(global_connectivity.data(),
                                                    global_connectivity.size());
+
+  Node verify_info;
+  if(!blueprint::mesh::verify(out, verify_info))
+  {
+      std::cout << "Mesh Verify failed!" << std::endl;
+      std::cout << verify_info.to_yaml() << std::endl;
+  } else {
+      std::cout << "Mesh verify success!" << std::endl;
+  }
 }
 
 template <typename T>

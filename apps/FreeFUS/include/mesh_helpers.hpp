@@ -26,11 +26,13 @@ MeshData<U> load_mesh(MPI_Comm comm, mesh::CellType cell_type,
       fmesh.read_meshtags(*base_mesh_p, "Cell tags", std::nullopt));
   // auto facet_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
   //     fmesh.read_meshtags(*base_mesh_p, "Facet tags", std::nullopt));
+  auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
+      ghost_layer_mesh(*base_mesh_p, coord_element, cell_tags));
   // auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
-  //     ghost_layer_mesh(*base_mesh_p, coord_element, cell_tags, facet_tags));
-  // mesh_ptr->topology()->create_connectivity(tdim - 1, tdim);
+  //     ghost_layer_mesh(*base_mesh_p, coord_element));
+  mesh_ptr->topology()->create_connectivity(tdim - 1, tdim);
   // auto facet_tags = nullptr;
-  auto mesh_ptr = base_mesh_p;
+  // auto mesh_ptr = base_mesh_p;
   
   assert(!cell_tags->indices().empty() && "No cell tags found");
   // assert(!facet_tags->indices().empty() && "No facet tags found");
