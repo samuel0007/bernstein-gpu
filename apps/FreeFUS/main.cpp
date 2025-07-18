@@ -44,7 +44,7 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
   auto solution = std::make_shared<fem::Function<U>>(V);
 
   auto material_coefficients = freefus::create_materials_coefficients<U>(
-      V_DG, mesh_data, config.material_case);
+      V_DG, mesh_data, config.material_case, params);
 
   auto [V_out, u_out] =
       freefus::make_output_spaces(mesh_data.mesh, cell_type, P);
@@ -64,11 +64,11 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
     freefus::insitu_output_DG(material_coefficients, ascent_runner);
   }
 
-  auto model = freefus::create_model<ModelType::LinearLossyImplicit, T, U, P, Q, D>(
+  auto model = freefus::create_model<ModelType::NonLinearLossyImplicit, T, U, P, Q, D>(
       spaces, material_coefficients, mesh_data, params, config.model_type);
   auto solver = freefus::create_solver<T, U>(V, config);
 
-  auto timestepper = freefus::create_timestepper<TimesteppingType::Newmark, U, Vector>(V, params, config);
+  auto timestepper = freefus::create_timestepper<TimesteppingType::NonlinearNewmark, U, Vector>(V, params, config);
 
   T h_min = freefus::compute_global_min_cell_size(mesh_data.mesh);
   T sound_speed_min = freefus::compute_global_minimum_sound_speed<T>(

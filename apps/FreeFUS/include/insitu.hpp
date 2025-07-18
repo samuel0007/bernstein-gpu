@@ -26,7 +26,7 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
   conduit::Node ascent_opts;
 
   ascent_opts["default_dir"] = config.mesh_dir;
-  ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
+  // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
   ascent_runner.open(ascent_opts);
 
   conduit::Node scenes;

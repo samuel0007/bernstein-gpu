@@ -5,6 +5,26 @@ gmsh.model.add("spherical_transducer")
 
 
 
+# BP1-small / BP2-small
+# frequency = 0.1e6 # [Hz]
+# materials_sound_speed = [1500] # [m/s]
+# Lcap = 0.12         # Length of the cap box [m]
+# layers_height = []
+# layers_volume_markers = []
+# elementsPerWavelength = 2.4 # [elements]
+# Rcurv = 0.064       # radius of curvature
+# A     = 0.064       # aperture diameter
+
+# BP1 / BP2
+# frequency = 0.5e6 # [Hz]
+# materials_sound_speed = [1500] # [m/s]
+# Lcap = 0.12         # Length of the cap box [m]
+# layers_height = []
+# layers_volume_markers = []
+# elementsPerWavelength = 2.4 # [elements]
+# Rcurv = 0.064       # radius of curvature
+# A     = 0.064       # aperture diameter
+
 # BP3
 # frequency = 0.5e6 # [Hz]
 # materials_sound_speed = [1500, 2800] # [m/s]
@@ -16,14 +36,14 @@ gmsh.model.add("spherical_transducer")
 # A     = 0.064       # aperture diameter
 
 # BP3-small
-# frequency = 0.1e6 # [Hz]
-# materials_sound_speed = [1500, 2800] # [m/s]
-# Lcap = 0.03         # Length of the cap box [m]
-# layers_height = [0.0065, 0.0835]
-# layers_volume_markers = [2, 1]
-# elementsPerWavelength = 2.4 # [elements]
-# Rcurv = 0.064       # radius of curvature
-# A     = 0.064       # aperture diameter
+frequency = 0.1e6 # [Hz]
+materials_sound_speed = [1500, 2800] # [m/s]
+Lcap = 0.03         # Length of the cap box [m]
+layers_height = [0.0065, 0.0835]
+layers_volume_markers = [2, 1]
+elementsPerWavelength = 2.4 # [elements]
+Rcurv = 0.064       # radius of curvature
+A     = 0.064       # aperture diameter
 
 # BP4
 # frequency = 0.5e6 # [Hz]
@@ -37,15 +57,15 @@ gmsh.model.add("spherical_transducer")
 # A     = 0.064       # aperture diameter
 
 # BP4-small
-frequency = 0.1e6 # [Hz]
-# Water: 1, Skin: 2, Cortical: 3, Trabecular: 4, Brain: 5
-materials_sound_speed = [1500, 1610, 2800, 2300, 1560] # [m/s]
-Lcap = 0.026        # Length of the cap box [m]
-layers_height = [0.004, 0.0015, 0.004, 0.001, 0.0835]
-layers_volume_markers = [2, 3, 4, 3, 5]
-elementsPerWavelength = 2.4 # [elements]
-Rcurv = 0.064       # radius of curvature
-A     = 0.064       # aperture diameter
+# frequency = 0.1e6 # [Hz]
+# # Water: 1, Skin: 2, Cortical: 3, Trabecular: 4, Brain: 5
+# materials_sound_speed = [1500, 1610, 2800, 2300, 1560] # [m/s]
+# Lcap = 0.026        # Length of the cap box [m]
+# layers_height = [0.004, 0.0015, 0.004, 0.001, 0.0835]
+# layers_volume_markers = [2, 3, 4, 3, 5]
+# elementsPerWavelength = 2.4 # [elements]
+# Rcurv = 0.064       # radius of curvature
+# A     = 0.064       # aperture diameter
 
 cap_volume_marker = 1
 inflow_marker, outflow_marker = 1, 2
@@ -59,10 +79,10 @@ a = A/2.0 # Aperture radius
 s = Rcurv - math.sqrt(Rcurv**2 - a**2) # Height of cap
 
 # 1) full sphere centered so its cap is at z=0
-sphere_tag = gmsh.model.occ.addSphere(0, 0, -Rcurv, Rcurv)
+sphere_tag = gmsh.model.occ.addSphere(0, 0, Rcurv, Rcurv)
 
 # 2) cap‐box: x,y∈[−a,a], z∈[−s,0]
-capbox_tag = gmsh.model.occ.addBox(-a, -a, -s, 2*a, 2*a, s)
+capbox_tag = gmsh.model.occ.addBox(-a, -a, s, 2*a, 2*a, -s)
 
 gmsh.model.occ.synchronize()
 
@@ -74,7 +94,7 @@ topcap_dimtag = topcap_dimtags_list[0]
 
 # 4) cylindrical cap part: x,y∈[−a,a], z∈[−Lcap,−s]
 capcyl_tag = gmsh.model.occ.addCylinder(
-        0, 0, -Lcap,       # base center
+        0, 0, s,       # base center
         0, 0, Lcap - s,    # axis vector
         a                                # radius
     )
@@ -86,28 +106,33 @@ cap_dimtag = fuse_dimtags_list[0]
 
 gmsh.model.occ.synchronize()
 
-z = -Lcap
+z = Lcap
 layers_tag = []
 for h in layers_height:
     layers_tag.append(gmsh.model.occ.addCylinder(
             0, 0, z,     # base center
-            0, 0, -h,    # axis vector
+            0, 0, h,    # axis vector
             a            # radius
         ))
-    z -= h
+    z += h
 gmsh.model.occ.synchronize()
 
-unfragmented_transducer_dimtags = [(3, tag) for tag in layers_tag] + [cap_dimtag]
-transducer_volumes, transducer_volumes_mapping = gmsh.model.occ.fragment(
-    unfragmented_transducer_dimtags,
-    []
-)
+if layers_tag:
+    unfragmented_transducer_dimtags = [(3, tag) for tag in layers_tag] + [cap_dimtag]
+    transducer_volumes_dimtags, transducer_volumes_mapping = gmsh.model.occ.fragment(
+        unfragmented_transducer_dimtags,
+        []
+    )
+else:
+    transducer_volumes_dimtags = [cap_dimtag]
+    transducer_volumes_mapping = {cap_dimtag[1]: cap_dimtag}
 gmsh.model.occ.synchronize()
 
 # 6) extract all surface faces of the fused volume
-faces = gmsh.model.getBoundary(transducer_volumes, oriented=False, recursive=False)
+faces = gmsh.model.getBoundary(transducer_volumes_dimtags, oriented=False, recursive=False)
 all_face_tags = [f[1] for f in faces]
 
+print("Number of faces:", len(all_face_tags))
 # 7) identify inlet: the face whose z_max ≈ 0
 inlet_tag = None
 tol = 1e-6
@@ -115,7 +140,8 @@ for tag in all_face_tags:
     # returns [xmin, ymin, zmin, xmax, ymax, zmax]
     bb = gmsh.model.getBoundingBox(2, tag)
     zmin, zmax = bb[2], bb[5]
-    if abs(zmax) < tol and zmin < tol:
+    print(f"Face {tag}: zmin={zmin}, zmax={zmax}")
+    if abs(zmin) < tol:
         inlet_tag = tag
         break
 if inlet_tag is None:

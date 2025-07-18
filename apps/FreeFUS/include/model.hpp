@@ -318,7 +318,7 @@ public:
 
     Mp_action_ptr = std::make_unique<NonlinearMassAction>(mesh, V, alpha_Mp);
     Mpdot_action_ptr = std::make_unique<NonlinearMassAction>(mesh, V, alpha_Mp);
-    Mpdotdot_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_Mp);
+    Mpdotdot_action_ptr = std::make_unique<NonlinearMassAction>(mesh, V, alpha_Mp);
 
     M_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_M);
     Mgamma_action_ptr = std::make_unique<ExteriorMassAction>(
@@ -340,8 +340,15 @@ public:
     // - LHS
     // (M(u) + M + Mgamma) @ udd
     (*Mp_action_ptr)(udd, out, -1);
+    (*Mpdot_action_ptr)(udd, out, - 2 *gamma *m_dt);
+    (*Mpdotdot_action_ptr)(udd, out, - (beta *m_dt *m_dt + gamma*gamma *m_dt*m_dt));
+
     (*M_action_ptr)(udd, out, -1);
     (*Mgamma_action_ptr)(udd, out, -1);
+    (*Cgamma_action_ptr)(udd, out, -gamma * m_dt);
+    (*C_action_ptr)(udd, out, -gamma * m_dt);
+    (*K_action_ptr)(udd, out, -beta * m_dt * m_dt);
+
     // (M(ud) + C + Cgamma) @ ud
     (*Mpdot_action_ptr)(ud, out, -1);
     (*Cgamma_action_ptr)(ud, out, -1);
@@ -361,11 +368,11 @@ public:
     (*Mgamma_action_ptr)(in, out);
     (*C_action_ptr)(in, out, gamma *m_dt);
     (*Cgamma_action_ptr)(in, out, gamma *m_dt);
-    (*K_action_ptr)(in, out, beta *m_dt *m_dt);
+    (*K_action_ptr)(in, out, beta *m_dt *m_dt); 
     // Nonlinear part
     (*Mp_action_ptr)(in, out);
     (*Mpdot_action_ptr)(in, out, 2 *gamma *m_dt);
-    (*Mpdotdot_action_ptr)(in, out, 2 *(beta *m_dt *m_dt + gamma*gamma *m_dt*m_dt));
+    (*Mpdotdot_action_ptr)(in, out, 2 * (beta *m_dt *m_dt + gamma*gamma *m_dt*m_dt));
   };
 
   // Note: I really dislike this interface.
@@ -382,7 +389,7 @@ public:
    
     Mp_action_ptr->get_diag(diag_inv);
     Mpdot_action_ptr->get_diag(diag_inv, 2 *gamma *m_dt);
-    Mpdotdot_action_ptr->get_diag(diag_inv, 2 *(beta *m_dt *m_dt + gamma*gamma *m_dt*m_dt));
+    Mpdotdot_action_ptr->get_diag(diag_inv, 2 * (beta *m_dt *m_dt + gamma*gamma *m_dt*m_dt));
     acc::inverse(diag_inv);
   }
 
@@ -395,7 +402,7 @@ public:
   void update_coefficients(Vector &u, Vector &ud, Vector &udd) {
     Mp_action_ptr->set_coefficient(u);
     Mpdot_action_ptr->set_coefficient(ud);
-    // Mpdotdot_action_ptr->set_coefficient(udd);
+    Mpdotdot_action_ptr->set_coefficient(udd);
   }
 
 private:
@@ -404,7 +411,7 @@ private:
 
   std::unique_ptr<NonlinearMassAction> Mp_action_ptr;
   std::unique_ptr<NonlinearMassAction> Mpdot_action_ptr;
-  std::unique_ptr<MassAction> Mpdotdot_action_ptr;
+  std::unique_ptr<NonlinearMassAction> Mpdotdot_action_ptr;
 
   // std::unique_ptr<MassAction> Mp_jacobian_action_ptr;
   std::unique_ptr<MassAction> M_action_ptr;
@@ -430,14 +437,14 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
   std::vector<std::vector<std::int32_t>> facet_domains;
   // std::vector<int> ft_unique = {1, 2};
 
-
-  // TODO: this is a hacky fix as facet tags don't work in parallel with a vertex ghost mesh (see ghost layer functiomn)
+  // TRANSDUCER MESHES
+  // TODO: this is a hacky fix as facet tags don't work in parallel with a vertex ghost mesh (see ghost layer function)
   // s = Rcurv - math.sqrt(Rcurv**2 - a**2) # Height of cap
   const U Rcurv = 0.064;
   const U a = 0.032;
   const U s = Rcurv - std::sqrt(Rcurv * Rcurv - a * a);
   const U TOL = 1e-6; 
-
+    
   std::vector<std::int32_t> facets1 =
       mesh::locate_entities_boundary(*mesh_data.mesh, 2, [s, a, TOL](auto x) {
         std::vector<std::int8_t> marker(x.extent(1), false);
@@ -451,6 +458,7 @@ auto create_model(const auto &spaces, const auto &material_coefficients,
         }
         return marker;
       });
+  
 
   std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
       fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),

@@ -199,7 +199,6 @@ mesh::Mesh<T> ghost_layer_mesh(
     return oss.str();
   };
 
-
   std::unordered_map<std::string, std::int32_t> sig2cell;
   sig2cell.reserve(new_dofmap.extent(0));
   std::vector<std::int32_t> sig(new_dofmap.extent(1));
@@ -231,47 +230,44 @@ mesh::Mesh<T> ghost_layer_mesh(
   spdlog::info("-- Done! --");
   
   // Map tags
-  auto original_imap_cells = mesh.topology()->index_map(tdim);
-  auto new_imap_cells = new_mesh.topology()->index_map(tdim);
+  // auto original_imap_cells = mesh.topology()->index_map(tdim);
+  // auto new_imap_cells = new_mesh.topology()->index_map(tdim);
 
   auto original_local_cell_tag_indices = cell_tags->indices();
   auto original_cell_tag_values = cell_tags->values();
   const int N_cell_tags = original_local_cell_tag_indices.size();
-  std::vector<std::int64_t> original_global_cell_tag_indices(N_cell_tags);
-  original_imap_cells->local_to_global(original_local_cell_tag_indices, original_global_cell_tag_indices);
+  // std::vector<std::int64_t> original_global_cell_tag_indices(N_cell_tags);
+  // original_imap_cells->local_to_global(original_local_cell_tag_indices, original_global_cell_tag_indices);
 
 
-  std::vector<std::int32_t> new_local_cell_tag_indices(N_cell_tags);
+  std::vector<std::int32_t> new_cell_tag_indices(N_cell_tags);
   std::vector<TagT> new_cell_tag_values(N_cell_tags);
+
+  std::vector<std::pair<std::int32_t, TagT>> new_cell_tags;
+  new_cell_tags.reserve(N_cell_tags);
 
   for (int i = 0; i < N_cell_tags; ++i) {
     std::int32_t orig_idx = original_local_cell_tag_indices[i];
     TagT orig_value = original_cell_tag_values[i];
-    std::int64_t new_idx  = orig_cell_to_new_cell[orig_idx];
+    std::int32_t new_idx  = orig_cell_to_new_cell[orig_idx];
     if(new_idx == std::int64_t(-1))
       throw std::runtime_error("Missing tag");
-    new_local_cell_tag_indices[i] = new_idx;
-    new_cell_tag_values[i] = orig_value;
+    new_cell_tags.emplace_back(new_idx, orig_value);
   }
 
-  // new_imap_cells->global_to_local(new_global_cell_tag_indices, new_local_cell_tag_indices);
+  // Cell tags have to be ordered by their indices.
+  std::sort(new_cell_tags.begin(), new_cell_tags.end(),
+          [](auto &a, auto &b){ return a.first < b.first; });
 
-
-  // std::sort(new_cell_tags.begin(), new_cell_tags.end(),
-  //         [](auto &a, auto &b){ return a.first < b.first; });
-
-  // Unpack
-
-
-  // for (size_t i = 0; i < N_cell_tags; ++i) {
-  //   new_cell_tag_indices[i] = new_cell_tags[i].first;
-  //   new_cell_tag_values[i] = std::move(new_cell_tags[i].second);
-  // }
+  for (size_t i = 0; i < N_cell_tags; ++i) {
+    new_cell_tag_indices[i] = new_cell_tags[i].first;
+    new_cell_tag_values[i] = std::move(new_cell_tags[i].second);
+  }
 
   cell_tags = std::make_shared<mesh::MeshTags<TagT>>(
       cell_tags->topology(),
       cell_tags->dim(),
-      new_local_cell_tag_indices,
+      new_cell_tag_indices,
       new_cell_tag_values
   );
   

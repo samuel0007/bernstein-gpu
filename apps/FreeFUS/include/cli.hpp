@@ -91,14 +91,14 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
   po::options_description desc("Allowed options");
   // clang-format off
   desc.add_options()("help,h", "print usage message")
-      ("mesh,m", po::value<std::string>()->default_value("test_mesh"), "mesh folder name")
+      ("mesh,m", po::value<std::string>()->default_value("BP1-small"), "mesh folder name")
       ("output-path,o", po::value<std::string>()->default_value("output.bp"), "output path, must end in .bp")
       ("polynomial-basis", po::value<std::string>()->default_value("gll_warped"), "Polynomial basis: bernstein, gll_warped")
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
       ("model-type", po::value<int>()->default_value(1), "Model type [1-2]")
       ("timestepping-type", po::value<int>()->default_value(1), "Timestepping type [1-2]")
       ("CFL", po::value<T>()->default_value(0.5), "CFL number")
-      ("source-frequency", po::value<T>()->default_value(0.5e6), "Source frequency (Hz)")
+      ("source-frequency", po::value<T>()->default_value(0.1e6), "Source frequency (Hz)")
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
       ("domain-length", po::value<T>()->default_value(0.12), "Domain length (m)")
       ("window-length", po::value<T>()->default_value(4), "Window length (periods)")
@@ -108,7 +108,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("insitu-with-yaml", po::value<bool>()->default_value(true), "Search for an ascent_actions.yaml file in mesh dir.")
       ("cg-tol", po::value<T>()->default_value(1e-8), "Tolerance of CG solver")
       ("cg-maxsteps", po::value<int>()->default_value(200), "Max number of CG iterations")
-      ("nonlinear-tol", po::value<T>()->default_value(1e-10), "Tolerance of nonlinear solver")
+      ("nonlinear-tol", po::value<T>()->default_value(1e-6), "Tolerance of nonlinear solver")
       ("log-level", po::value<std::string>()->default_value("info"),
        "Log level: trace, debug, info, warn, err, critical, off");
   // clang-format on

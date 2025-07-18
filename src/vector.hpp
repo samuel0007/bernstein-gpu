@@ -394,11 +394,11 @@ auto norm(const Vector &a, dolfinx::la::Norm type = dolfinx::la::Norm::l2) {
 /// @param x
 /// @param y
 template <typename Vector, typename S>
-void axpy(Vector &r, S alpha, const Vector &x, const Vector &y) {
+void axpy(Vector &r, S alpha, Vector &x, const Vector &y) {
   spdlog::debug("AXPY start");
   using T = typename Vector::value_type;
-  thrust::transform(thrust::device, x.array().begin(),
-                    x.array().begin() + x.map()->size_local(),
+  thrust::transform(thrust::device, x.mutable_array().begin(),
+                    x.mutable_array().begin() + x.map()->size_local(),
                     y.array().begin(), r.mutable_array().begin(),
                     [alpha] __host__ __device__(const T &vx, const T &vy) {
                       return vx * alpha + vy;

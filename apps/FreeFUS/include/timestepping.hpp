@@ -163,6 +163,8 @@ public:
     // 2. Velocity: ud = ud + udd * (1 - gamma) * dt;
     acc::axpy(*ud, (1 - gamma) * dt, *udd, *ud);
 
+    // acc::copy_d_to_d(*udd, *next_udd);
+
     model->set_dt(dt);
     // Solve Nonlinear system of equations via newton iterations
     int nonlinear_its = 0;
@@ -181,19 +183,20 @@ public:
       
       // 0. Acceleration: udd = udd + delta_udd
       acc::axpy(*next_udd, 1, *delta_udd, *next_udd);
-      // 1. Displacement: u = u + delta_udd * beta * dt2
-      acc::axpy(*u, beta * dt2, *delta_udd, *u);
-      // 2. Velocity: ud = ud + delta_udd * gamma * dt
-      acc::axpy(*ud, gamma * dt, *delta_udd, *ud);
-      
+
       model->update_coefficients(*u, *ud, *next_udd);
       model->residual(*u, *ud, *next_udd, *g, *gd, *R);
-      residual_norm = acc::squared_norm(*R);
 
+      residual_norm = acc::squared_norm(*R);
+   
       spdlog::info("solver its={}, residual_norm={}", solver_its, std::sqrt(residual_norm));
       linear_its += solver_its;
       ++nonlinear_its;
     }
+    // 1. Displacement: u = u + delta_udd * beta * dt2
+    acc::axpy(*u, beta * dt2, *next_udd, *u);
+    // 2. Velocity: ud = ud + delta_udd * gamma * dt
+    acc::axpy(*ud, gamma * dt, *next_udd, *ud);
 
     acc::copy_d_to_d(*next_udd, *udd);
     spdlog::info("non_linear its={}, total linear its={}", nonlinear_its, linear_its);
