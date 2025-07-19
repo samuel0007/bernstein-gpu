@@ -143,6 +143,12 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
     add_pipelines["action"] = "add_pipelines";
     add_pipelines["pipelines"] = pipelines;
 
+    conduit::Node &add_extracts = ascent_actions.append();
+    add_extracts["action"] = "add_extracts";
+    conduit::Node &extracts = add_extracts["extracts"];
+    extracts["e1/type"]  = "relay";
+    extracts["e1/params/protocol"] = "hdf5";
+    extracts["e1/params/path"] = config.mesh_dir;
   } else {
     scenes["s1/plots/p1/type"] = "pseudocolor";
     scenes["s1/plots/p1/field"] = field_name;
