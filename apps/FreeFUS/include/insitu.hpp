@@ -26,12 +26,11 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
   conduit::Node ascent_opts;
 
   ascent_opts["default_dir"] = config.mesh_dir;
-  // ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
+  ascent_opts["mpi_comm"] = MPI_Comm_c2f(V->mesh()->comm());
   ascent_runner.open(ascent_opts);
 
   conduit::Node scenes;
   if (tdim == 3) {
-
     scenes["s1/plots/p1/type"] = "pseudocolor";
     scenes["s1/plots/p1/field"] = field_name;
     scenes["s1/plots/p1/pipeline"] = "pl1";
@@ -143,12 +142,14 @@ void setup_insitu(std::shared_ptr<fem::FunctionSpace<T>> &V,
     add_pipelines["action"] = "add_pipelines";
     add_pipelines["pipelines"] = pipelines;
 
-    conduit::Node &add_extracts = ascent_actions.append();
-    add_extracts["action"] = "add_extracts";
-    conduit::Node &extracts = add_extracts["extracts"];
-    extracts["e1/type"]  = "relay";
-    extracts["e1/params/protocol"] = "hdf5";
-    extracts["e1/params/path"] = config.mesh_dir;
+    // conduit::Node &add_extracts = ascent_actions.append();
+    // add_extracts["action"] = "add_extracts";
+    // conduit::Node &extracts = add_extracts["extracts"];
+    // extracts["e1/type"]  = "relay";
+    // extracts["e1/params/protocol"] = "hdf5";
+    // extracts["e1/params/path"] = config.mesh_dir;
+    // extracts["e1/params/num_files"] = 1;
+
   } else {
     scenes["s1/plots/p1/type"] = "pseudocolor";
     scenes["s1/plots/p1/field"] = field_name;

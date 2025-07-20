@@ -50,7 +50,7 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.mesh_filepath = fs::path(DATA_DIR) / cfg.mesh_name / "mesh.xdmf";
   cfg.mesh_dir = fs::path(DATA_DIR) / cfg.mesh_name;
   cfg.lvariant = str_to_basixlv.at(vm["polynomial-basis"].as<std::string>());
-  cfg.output_filepath = vm["output-path"].as<std::string>();
+  cfg.output_filepath = fs::path(DATA_DIR) / cfg.mesh_name / vm["output-path"].as<std::string>();
   {
     auto ext = fs::path(cfg.output_filepath).extension();
     if (ext != ".bp")
@@ -64,6 +64,7 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.output_steps = vm["output-steps"].as<int>();
   cfg.log_level = spdlog::level::from_str(vm["log-level"].as<std::string>());
   cfg.material_case = static_cast<MaterialCase>(vm["material-case"].as<int>());
+  cfg.sample_harmonic = vm["sample-harmonic"].as<int>();
   cfg.insitu = vm["insitu"].as<bool>();
   cfg.insitu_output_steps = vm["insitu-output-steps"].as<int>();
   cfg.insitu_with_yaml = vm["insitu-with-yaml"].as<bool>();
@@ -97,12 +98,13 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
       ("model-type", po::value<int>()->default_value(1), "Model type [1-2]")
       ("timestepping-type", po::value<int>()->default_value(1), "Timestepping type [1-2]")
+      ("sample-harmonic", po::value<int>()->default_value(10), "Number of harmonics to sample at the end of the simulation.")
       ("CFL", po::value<T>()->default_value(0.5), "CFL number")
       ("source-frequency", po::value<T>()->default_value(0.1e6), "Source frequency (Hz)")
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
       ("domain-length", po::value<T>()->default_value(0.12), "Domain length (m)")
       ("window-length", po::value<T>()->default_value(4), "Window length (periods)")
-      ("output-steps", po::value<int>()->default_value(200), "Number of I/O output steps")
+      ("output-steps", po::value<int>()->default_value(200), "Frequency of I/O output steps")
       ("insitu", po::value<bool>()->default_value(true), "Insitu visualisation")
       ("insitu-output-steps", po::value<int>()->default_value(50), "Number of insitu output steps")
       ("insitu-with-yaml", po::value<bool>()->default_value(true), "Search for an ascent_actions.yaml file in mesh dir.")

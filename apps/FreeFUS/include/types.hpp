@@ -50,6 +50,8 @@ template <typename T> struct UserConfig {
   T domain_length;
   T window_length;
 
+  int sample_harmonic;
+
   int output_steps;
   bool insitu;
   bool insitu_with_yaml;

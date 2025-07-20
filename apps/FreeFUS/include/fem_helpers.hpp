@@ -42,8 +42,8 @@ auto make_output_spaces(const std::shared_ptr<mesh::Mesh<T>> &mesh_ptr,
   basix::cell::type b_cell_type = cell_type_to_basix_type(cell_type);
   // Output space
   basix::FiniteElement lagrange_element = basix::create_element<T>(
-      basix::element::family::P, b_cell_type, polynomial_degree,
-      basix::element::lagrange_variant::equispaced,
+      basix::element::family::P, b_cell_type, polynomial_degree + 2, // "refine twice the mesh"
+      basix::element::lagrange_variant::gll_warped,
       basix::element::dpc_variant::unset, false);
 
   auto V_out =

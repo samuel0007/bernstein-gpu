@@ -1,0 +1,123 @@
+-
+  action: "add_scenes"
+  scenes:
+    s1:
+      plots:
+        p1:
+          type: pseudocolor
+          field: "u"
+          pipeline: pl1
+        p2:
+          type: pseudocolor
+          field: "u"
+          pipeline: pl2
+          color_table:
+            annotation: false
+        p3:
+          type: pseudocolor
+          field: "u"
+          pipeline: pl3
+          color_table:
+            annotation: false
+      image_prefix: "u"
+      renders:
+        r1:
+          image_prefix: r1
+          camera:
+            azimuth: 20.0
+            elevation: 40.0
+        r2:
+          image_prefix: r2
+          camera:
+            azimuth: 10.0
+            elevation: 80.0
+
+    # s2:
+    #   plots:
+    #     p1:
+    #       type: volume
+    #       field: "u"
+    #   renders:
+    #     r1:
+    #       image_prefix: rv1
+    #       camera:
+    #         azimuth: 45.0
+    #         elevation: 40.0
+
+    s3:
+      plots:
+        p1:
+          type: pseudocolor
+          field: "u"
+          pipeline: pl4
+      renders:
+        r1:
+          dataset_bounds: [0.0, 0.03, 0.0, 0.03, -0.12, 0.]
+          image_prefix: ri1
+          camera:
+            azimuth: 110.0
+            elevation: 40.0
+-
+  action: "add_pipelines"
+  pipelines:
+    pl1:
+      f1:
+        type: slice
+        params:
+          point:
+            x_offset: 0.0
+            y_offset: 0.0
+            z_offset: 0.0
+          normal:
+            x: 0.0
+            y: 1.0
+            z: 0.0
+
+    pl2:
+      f1:
+        type: slice
+        params:
+          point:
+            x_offset: 0.0
+            y_offset: 0.0
+            z_offset: 0.0
+          normal:
+            x: 0.0
+            y: 0.0
+            z: 1.0
+
+    pl3:
+      f1:
+        type: slice
+        params:
+          point:
+            x_offset: 0.0
+            y_offset: 0.0
+            z_offset: 0.0
+          normal:
+            x: 1.0
+            y: 0.0
+            z: 0.0
+
+    pl4:
+      f1:
+        # type: clip
+        # params:
+        #   plane: 
+        #     point:
+        #       x: 0.0
+        #       y: 0.0
+        #       z: 0.0
+        #     normal:
+        #       x: 0.0
+        #       y: 1.0
+        #       z: 0.0
+      # f2:
+        type: contour
+        params:
+          field: "u"
+          # iso_values: [-1000000, -100000, -10000, 10000, 100000]
+          iso_values: [-5000000, 200000]
+          # iso_values: [-10000, 10000]
+
+        

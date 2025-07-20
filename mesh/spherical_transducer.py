@@ -6,14 +6,14 @@ gmsh.model.add("spherical_transducer")
 
 
 # BP1-small / BP2-small
-# frequency = 0.1e6 # [Hz]
-# materials_sound_speed = [1500] # [m/s]
-# Lcap = 0.12         # Length of the cap box [m]
-# layers_height = []
-# layers_volume_markers = []
-# elementsPerWavelength = 2.4 # [elements]
-# Rcurv = 0.064       # radius of curvature
-# A     = 0.064       # aperture diameter
+frequency = 0.1e6 # [Hz]
+materials_sound_speed = [1500] # [m/s]
+Lcap = 0.12         # Length of the cap box [m]
+layers_height = []
+layers_volume_markers = []
+elementsPerWavelength = 2.4 # [elements]
+Rcurv = 0.064       # radius of curvature
+A     = 0.064       # aperture diameter
 
 # BP1 / BP2
 # frequency = 0.5e6 # [Hz]
@@ -36,14 +36,14 @@ gmsh.model.add("spherical_transducer")
 # A     = 0.064       # aperture diameter
 
 # BP3-small
-frequency = 0.1e6 # [Hz]
-materials_sound_speed = [1500, 2800] # [m/s]
-Lcap = 0.03         # Length of the cap box [m]
-layers_height = [0.0065, 0.0835]
-layers_volume_markers = [2, 1]
-elementsPerWavelength = 2.4 # [elements]
-Rcurv = 0.064       # radius of curvature
-A     = 0.064       # aperture diameter
+# frequency = 0.1e6 # [Hz]
+# materials_sound_speed = [1500, 2800] # [m/s]
+# Lcap = 0.03         # Length of the cap box [m]
+# layers_height = [0.0065, 0.0835]
+# layers_volume_markers = [2, 1]
+# elementsPerWavelength = 2.4 # [elements]
+# Rcurv = 0.064       # radius of curvature
+# A     = 0.064       # aperture diameter
 
 # BP4
 # frequency = 0.5e6 # [Hz]
