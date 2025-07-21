@@ -61,10 +61,13 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.source_frequency = vm["source-frequency"].as<U>();
   cfg.source_amplitude = vm["source-amplitude"].as<U>();
   cfg.domain_length = vm["domain-length"].as<U>();
+  cfg.domain_width = vm["domain-width"].as<U>();
   cfg.output_steps = vm["output-steps"].as<int>();
   cfg.log_level = spdlog::level::from_str(vm["log-level"].as<std::string>());
   cfg.material_case = static_cast<MaterialCase>(vm["material-case"].as<int>());
   cfg.sample_harmonic = vm["sample-harmonic"].as<int>();
+  cfg.sampling_periods = vm["sampling-periods"].as<int>();
+
   cfg.insitu = vm["insitu"].as<bool>();
   cfg.insitu_output_steps = vm["insitu-output-steps"].as<int>();
   cfg.insitu_with_yaml = vm["insitu-with-yaml"].as<bool>();
@@ -83,6 +86,9 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.nonlinear_tol = vm["nonlinear-tol"].as<double>();
   cfg.window_length = vm["window-length"].as<double>();
 
+  cfg.sample_nx = vm["sample-nx"].as<int>();
+  cfg.sample_nz = vm["sample-nz"].as<int>();
+
   return cfg;
 }
 
@@ -98,11 +104,12 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
       ("model-type", po::value<int>()->default_value(1), "Model type [1-2]")
       ("timestepping-type", po::value<int>()->default_value(1), "Timestepping type [1-2]")
-      ("sample-harmonic", po::value<int>()->default_value(10), "Number of harmonics to sample at the end of the simulation.")
+      ("sample-harmonic", po::value<int>()->default_value(1), "Number of harmonics to sample at the end of the simulation.")
       ("CFL", po::value<T>()->default_value(0.5), "CFL number")
       ("source-frequency", po::value<T>()->default_value(0.1e6), "Source frequency (Hz)")
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
       ("domain-length", po::value<T>()->default_value(0.12), "Domain length (m)")
+      ("domain-width", po::value<T>()->default_value(0.07), "Domain width (m)")
       ("window-length", po::value<T>()->default_value(4), "Window length (periods)")
       ("output-steps", po::value<int>()->default_value(200), "Frequency of I/O output steps")
       ("insitu", po::value<bool>()->default_value(true), "Insitu visualisation")
@@ -111,6 +118,9 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("cg-tol", po::value<T>()->default_value(1e-8), "Tolerance of CG solver")
       ("cg-maxsteps", po::value<int>()->default_value(200), "Max number of CG iterations")
       ("nonlinear-tol", po::value<T>()->default_value(1e-6), "Tolerance of nonlinear solver")
+      ("sample-nx", po::value<int>()->default_value(200), "Sampling in X direction")
+      ("sample-nz", po::value<int>()->default_value(200), "Sampling in Z direction")
+      ("sampling-periods", po::value<int>()->default_value(4), "Sampling time (periods)")
       ("log-level", po::value<std::string>()->default_value("info"),
        "Log level: trace, debug, info, warn, err, critical, off");
   // clang-format on

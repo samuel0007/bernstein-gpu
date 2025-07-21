@@ -1,7 +1,7 @@
-#include <mpi.h>
-#include <spdlog/spdlog.h>
 #include <dolfinx.h>
 #include <dolfinx/io/ADIOS2Writers.h>
+#include <mpi.h>
+#include <spdlog/spdlog.h>
 
 #include "util.hpp"
 #include "vector.hpp"
@@ -49,8 +49,13 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
   auto [V_out, u_out] =
       freefus::make_output_spaces(mesh_data.mesh, cell_type, P);
 
+  auto [V_sliced_out, u_sliced_out, interpolation_data] =
+      freefus::make_sliced_output_spaces(
+          mesh_data.mesh, solution, config.domain_width, config.domain_length,
+          config.sample_nx, config.sample_nz);
+
   io::VTXWriter<U> fwriter(mesh_data.mesh->comm(), config.output_filepath,
-                           {u_out}, "bp5");
+                           {u_sliced_out}, "bp5");
 
   ascent::Ascent ascent_runner;
   conduit::Node conduit_mesh;
@@ -64,11 +69,14 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
     freefus::insitu_output_DG(material_coefficients, ascent_runner);
   }
 
-  auto model = freefus::create_model<ModelType::LinearLossyImplicit, T, U, P, Q, D>(
-      spaces, material_coefficients, mesh_data, params, config.model_type);
+  auto model =
+      freefus::create_model<ModelType::NonLinearLossyImplicit, T, U, P, Q, D>(
+          spaces, material_coefficients, mesh_data, params, config.model_type);
   auto solver = freefus::create_solver<T, U>(V, config);
 
-  auto timestepper = freefus::create_timestepper<TimesteppingType::Newmark, U, Vector>(V, params, config);
+  auto timestepper =
+      freefus::create_timestepper<TimesteppingType::NonlinearNewmark, U, Vector>(
+          V, params, config);
 
   T h_min = freefus::compute_global_min_cell_size(mesh_data.mesh);
   T sound_speed_min = freefus::compute_global_minimum_sound_speed<T>(
@@ -97,7 +105,9 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
 
     if (!(steps % config.output_steps)) {
       timestepper->get_solution(solution);
-      u_out->interpolate(*solution);
+      freefus::interpolate_to_slice(solution, u_sliced_out, interpolation_data);
+
+      // u_out->interpolate(*solution);
       fwriter.write(current_time);
       spdlog::info("File output: wrote solution at time {} (step {})",
                    current_time, steps);
@@ -120,46 +130,49 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
     }
   }
 
-  // At the end of the simulation, to sample up to the nth harmonic for a single period, we need a timestep of 
-  // 1 / (2 * source_frequency * n) > delta t for one period 
-  if(config.sample_harmonic > 0) {
-    T harmonic_dt = 1. / (2 * params.source_frequency * config.sample_harmonic);
+  // At the end of the simulation, to sample up to the nth harmonic for a single
+  // period, we need a timestep of 1 / (2 * source_frequency * n) > delta t for
+  // one period
+  if (config.sample_harmonic > 0) {
+    T harmonic_dt = 1. / (2. * params.source_frequency * config.sample_harmonic);
     T sampling_dt = std::min(max_dt, harmonic_dt);
-    T sampling_T = final_time + (params.period * 4); // We simulate over 4 periods
-    spdlog::info("max harmonic={}, samping_dt={}", config.sample_harmonic, sampling_dt);
+    T sampling_T =
+        final_time + (params.period * config.sampling_periods); // We simulate over 4 periods
+    spdlog::info("max harmonic={}, sampling_dt={}", config.sample_harmonic,
+                 sampling_dt);
     int sampling_steps = 0;
     while (current_time < sampling_T) {
-      T dt = std::min(max_dt, sampling_T - current_time);
+      T dt = std::min(sampling_dt, sampling_T - current_time);
       timestepper->evolve(model, solver, current_time, dt);
       current_time += dt;
       timestepper->get_solution(solution);
-      u_out->interpolate(*solution);
+      // u_out->interpolate(*solution);
+      freefus::interpolate_to_slice(solution, u_sliced_out, interpolation_data);
+
       fwriter.write(current_time);
-      spdlog::info("File output: wrote solution at time {} (step {})",
-                  current_time, steps);
+      spdlog::info("File output: wrote solution at time {} (step {}), sampling final time={}",
+                   current_time, steps, sampling_T);
       ++steps;
       ++sampling_steps;
     }
-    spdlog::info("Number of sampling steps={}, max harmonic={}, samping_dt={}", sampling_steps, config.sample_harmonic, sampling_dt);
+    spdlog::info("Number of sampling steps={}, max harmonic={}, samping_dt={}",
+                 sampling_steps, config.sample_harmonic, sampling_dt);
   }
 
   timestepper->get_solution(solution);
   u_out->interpolate(*solution);
   // fwriter.write(current_time);
-  spdlog::info("File output: wrote solution at time {} (step {})",
-                current_time, steps);
+  spdlog::info("File output: wrote solution at time {} (step {})", current_time,
+               steps);
 
   if (config.insitu) {
     timestepper->get_solution(solution);
     u_out->interpolate(*solution);
-    freefus::publish_insitu(u_out, ascent_runner, conduit_mesh,
-                            ascent_actions);
-    spdlog::info(
-        "In-situ output: executed Ascent actions at time {} (step {})",
-        current_time, steps);
+    freefus::publish_insitu(u_out, ascent_runner, conduit_mesh, ascent_actions);
+    spdlog::info("In-situ output: executed Ascent actions at time {} (step {})",
+                 current_time, steps);
     ascent_runner.close();
   }
-
 }
 
 int main(int argc, char *argv[]) {

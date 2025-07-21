@@ -48,9 +48,14 @@ template <typename T> struct UserConfig {
   T source_frequency;
   T source_amplitude;
   T domain_length;
+  T domain_width;
+
   T window_length;
 
   int sample_harmonic;
+  int sampling_periods;
+  int sample_nx;
+  int sample_nz;
 
   int output_steps;
   bool insitu;

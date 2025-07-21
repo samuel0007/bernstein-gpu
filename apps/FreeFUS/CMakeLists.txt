@@ -1,9 +1,6 @@
 project(FreeFUS LANGUAGES CXX)
-# Options
-set(DIMENSION        3
-    CACHE STRING "Spatial dimension (2, 3)")
-set(LVARIANT "gll_warped"
-    CACHE STRING "Basix LagrangeVariant (gll_warped, bernstein)")
+# set(DIMENSION        3
+#     CACHE STRING "Spatial dimension (2, 3)")
 
 set(CMAKE_CUDA_ARCHITECTURES 89)  # RTX A6000
 set(CMAKE_CUDA_STANDARD 20)
@@ -42,9 +39,11 @@ target_include_directories(${PROJECT_NAME}
 # )
 
 link_common(${PROJECT_NAME} main.cpp)
-target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent_mpi)
-# target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent)
-
+if (DEFINED ENV{CRAYPE_VERSION})
+  target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent_mpi)
+else()
+  target_link_libraries(${PROJECT_NAME} PRIVATE ascent::ascent)
+endif()
 
 target_compile_definitions(${PROJECT_NAME}
   PRIVATE
