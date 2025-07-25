@@ -72,7 +72,7 @@ std::vector<Material<T>> BP1Materials{
 
 template <typename T>
 std::vector<Material<T>> BP2Materials{
-    {WaterData<T>::density, WaterData<T>::sound_speed, 100, 1}};
+    {WaterData<T>::density, WaterData<T>::sound_speed, 1, 1}};
 
 template <typename T>
 std::vector<Material<T>> BP3Materials{

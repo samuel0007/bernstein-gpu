@@ -22,6 +22,7 @@ static const std::unordered_map<std::string, el::lagrange_variant>
                       {"gll_warped", el::lagrange_variant::gll_warped}};
 
 template <typename T> void display_user_config(const UserConfig<T> &cfg) {
+  spdlog::info("Polynomial degree      : {}", POLYNOMIAL_DEGREE);
   spdlog::info("Mesh name              : {}", cfg.mesh_name);
   spdlog::info("Mesh filepath          : {}", cfg.mesh_filepath);
   spdlog::info("Output file            : {}", cfg.output_filepath);
@@ -119,8 +120,8 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("cg-tol", po::value<T>()->default_value(1e-10), "Tolerance of CG solver")
       ("cg-max-steps", po::value<int>()->default_value(200), "Max number of CG iterations")
       ("nonlinear-tol", po::value<T>()->default_value(1e-6), "Tolerance of nonlinear solver")
-      ("sample-nx", po::value<int>()->default_value(200), "Sampling in X direction")
-      ("sample-nz", po::value<int>()->default_value(200), "Sampling in Z direction")
+      ("sample-nx", po::value<int>()->default_value(500), "Sampling in X direction")
+      ("sample-nz", po::value<int>()->default_value(500), "Sampling in Z direction")
       ("sampling-periods", po::value<int>()->default_value(4), "Sampling time (periods)")
       ("refinement-level", po::value<int>()->default_value(1), "Uniformly refine input mesh (level). By default, the mesh is not refined")
       ("log-level", po::value<std::string>()->default_value("info"),
