@@ -179,8 +179,8 @@ public:
   using value_type = T;
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
-  MatFreeStiffnessSF3D(std::shared_ptr<mesh::Mesh<T>> mesh,
-                       std::shared_ptr<fem::FunctionSpace<T>> V, T alpha)
+  MatFreeStiffnessSF3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                       std::shared_ptr<fem::FunctionSpace<U>> V, U alpha)
       : mesh(mesh), V(V) {
     auto dofmap = V->dofmap();
     auto map = dofmap->index_map;
@@ -190,19 +190,19 @@ public:
     init(alpha_vec.array());
   }
 
-  MatFreeStiffnessSF3D(std::shared_ptr<mesh::Mesh<T>> mesh,
-                       std::shared_ptr<fem::FunctionSpace<T>> V,
-                       std::span<const T> alpha)
+  MatFreeStiffnessSF3D(std::shared_ptr<mesh::Mesh<U>> mesh,
+                       std::shared_ptr<fem::FunctionSpace<U>> V,
+                       std::span<const U> alpha)
       : mesh(mesh), V(V) {
     init(alpha);
   }
 
-  void init(std::span<const T> alpha) {
+  void init(std::span<const U> alpha) {
     // auto [lcells, bcells] = compute_boundary_cells(V);
     // spdlog::debug("#lcells = {}, #bcells = {}", lcells.size(),
     // bcells.size());
 
-    // auto element_p = this->V->element();
+    auto element_p = this->V->element();
     // std::vector<int> dof_reordering = get_tp_ordering2D<P>(element_p);
     // std::vector<int> dof_reordering = {0, 4, 1, 3, 2, 6, 5, 9, 8, 7};
     // std::vector<int> dof_reordering = {0, 1, 2, 3};
@@ -234,7 +234,7 @@ public:
 
     // Construct quadrature points table
     auto [rule0, rule1, rule2, ruleT] =
-        create_quadrature_tetrahedron_duffy<T>(Q);
+        create_quadrature_tetrahedron_duffy<U>(Q);
 
     auto &[qpts0, qwts0] = rule0;
     auto &[qpts1, qwts1] = rule1;
@@ -242,17 +242,17 @@ public:
     auto &[qptsT, _] = ruleT;
 
     // Create 1D elements
-    std::array<std::shared_ptr<basix::FiniteElement<T>>, P>
+    std::array<std::shared_ptr<basix::FiniteElement<U>>, P>
         elems; // No default ctor
     std::array<std::vector<int>, P> reordering_N;
 
     for (int p = 0; p < P; ++p) {
       elems[p] =
-          std::make_shared<basix::FiniteElement<T>>(basix::create_element<T>(
+          std::make_shared<basix::FiniteElement<U>>(basix::create_element<U>(
               basix::element::family::P, basix::cell::type::interval, p,
               basix::element::lagrange_variant::bernstein,
               basix::element::dpc_variant::unset, (p == 0)));
-      reordering_N[p] = get_tp_ordering1D<T>(elems[p], p);
+      reordering_N[p] = get_tp_ordering1D<U>(elems[p], p);
     }
 
     auto [phi_2, shape_2] = elems[P - 1]->tabulate(0, qpts2, {qpts2.size(), 1});
@@ -263,7 +263,7 @@ public:
               << std::endl;
     assert(shape_2[1] == Q && shape_2[2] == N - 1);
 
-    std::vector<T> phi_1_N(
+    std::vector<U> phi_1_N(
         (N - 1) * Q * (N - 1),
         0.); // this could be more memory efficient (2x), but indexing?
     for (int p = 0; p < N - 1; ++p) {
@@ -283,7 +283,7 @@ public:
                              phi_1_N.size(), N - 1, Q, N - 1)
               << std::endl;
 
-    std::vector<T> phi_0_N(
+    std::vector<U> phi_0_N(
         (N - 1) * Q * (N - 1),
         0.); // this could be more memory efficient (2x), but indexing?
     for (int p = 0; p < N - 1; ++p) {
@@ -324,6 +324,18 @@ public:
                                    qwts1.data(), qwts1.size() * sizeof(T)));
     err_check(deviceMemcpyToSymbol((kernels::stiffness::qwts2_d<T, Q>),
                                    qwts2.data(), qwts2.size() * sizeof(T)));
+
+    auto [qpts, qwts] = basix::quadrature::make_quadrature<U>(
+        basix::quadrature::type::Default, basix::cell::type::tetrahedron,
+        basix::polyset::type::standard, 2 * Q - 2);
+
+    // assert(nq == qpts.size() / tdim);
+
+    auto [dphi, shape] = element_p->tabulate(qpts, {nq, tdim}, 1);
+
+    // Copy only derivatives
+    dphi_d_span = copy_to_device(dphi.begin() + dphi.size() / (tdim + 1),
+                                 dphi.end(), dphi_d, "dphi");
   }
 
   template <typename Vector>
@@ -348,17 +360,42 @@ public:
     check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
-    assert(false && "todo for jacobi preconditioning of cg");
+  template <typename Vector>
+  void get_diag_inverse(Vector &diag_inv, U global_coefficient = 1.) {
+    diag_inv.set(0.);
+    this->get_diag(diag_inv, global_coefficient);
+    thrust::transform(thrust::device, diag_inv.mutable_array().begin(),
+                      diag_inv.mutable_array().begin() +
+                          diag_inv.map()->size_local(),
+                      diag_inv.mutable_array().begin(),
+                      [] __host__ __device__(T yi) { return 1.0 / yi; });
+  }
+
+  template <typename Vector>
+  void get_diag(Vector &diag, U global_coefficient = 1.) {
+    T *out_dofs = diag.mutable_array().data();
+
+    dim3 grid_size(this->number_of_local_cells);
+    dim3 block_size(K);
+    kernels::stiffness::stiffness_operator3D_diagonal<T, K, nq>
+        <<<grid_size, block_size>>>(
+            out_dofs, this->alpha_d_span.data(), this->geom_d_span.data(),
+            this->dofmap_d_span.data(), this->dphi_d_span.data(),
+            global_coefficient);
+    check_device_last_error();
   }
 
 private:
   static constexpr int N = P + 1;
   static constexpr int K = N * (N + 1) * (N + 2) / 6; // Number of dofs on tet
+  static constexpr int nq = 14 * (Q == 3) + 24 * (Q == 4) + 45 * (Q == 5) +
+                            74 * (Q == 6) + 122 * (Q == 7) + 177 * (Q == 8) +
+                            729 * (Q == 9) + 1000 * (Q == 10) +
+                            1331 * (Q == 11);
   std::size_t number_of_local_cells;
 
-  std::shared_ptr<mesh::Mesh<T>> mesh;
-  std::shared_ptr<fem::FunctionSpace<T>> V;
+  std::shared_ptr<mesh::Mesh<U>> mesh;
+  std::shared_ptr<fem::FunctionSpace<U>> V;
 
   thrust::device_vector<T> alpha_d;
   std::span<const T> alpha_d_span;
@@ -377,6 +414,9 @@ private:
 
   thrust::device_vector<std::int32_t> dofmap_d;
   std::span<const std::int32_t> dofmap_d_span;
+
+  thrust::device_vector<T> dphi_d;
+  std::span<const T> dphi_d_span;
 };
 
 } // namespace dolfinx::acc

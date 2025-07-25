@@ -11,8 +11,8 @@ from vtk.util.numpy_support import vtk_to_numpy
 
 # --- Default Configuration ---
 DEFAULT_FIELD_NAME = "u"
-DEFAULT_SAMPLING_DIMS = [200, 1, 200]
-DEFAULT_TARGET_FREQ_HZ = 0.1e6
+DEFAULT_SAMPLING_DIMS = [500, 1, 1000]
+DEFAULT_TARGET_FREQ_HZ = 0.5e6
 DEFAULT_OUTPUT_DIR = Path("./output")
 
 # --- Matplotlib Plotting Style ---

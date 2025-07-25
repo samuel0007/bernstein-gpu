@@ -212,12 +212,18 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   {
     auto start = std::chrono::high_resolution_clock::now();
+    cudaStream_t s1, s2, s3;
+    cudaStreamCreate(&s1);
+    cudaStreamCreate(&s2);
+    cudaStreamCreate(&s3);
+
     for (int i = 0; i < nreps; ++i) {
-      y_d.set(0.);
-      gpu_action_stiffness(x_d, y_d);
-      gpu_action_exterior1(x_d, y_d);
-      gpu_action_exterior2(x_d, y_d);
+      // y_d.set(0.);
+      gpu_action_stiffness(x_d, y_d, 1., s1);
+      gpu_action_exterior1(x_d, y_d, 1., s1);
+      gpu_action_exterior2(x_d, y_d, 1., s1);
     }
+    device_synchronize();
     auto stop = std::chrono::high_resolution_clock::now();
     std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
     std::chrono::duration<double> duration = stop - start;

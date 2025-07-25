@@ -91,7 +91,8 @@ public:
                                             this->detJ_geom_d, "detJ_geom");
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out, T global_coefficient = 1.) {
+  template <typename Vector>
+  void operator()(Vector &in, Vector &out, T global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -110,7 +111,8 @@ public:
     check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv, T global_coefficient = 1.) {
+  template <typename Vector>
+  void get_diag_inverse(Vector &diag_inv, T global_coefficient = 1.) {
     diag_inv.set(0.);
     T *out_dofs = diag_inv.mutable_array().data();
 
@@ -118,7 +120,8 @@ public:
     dim3 block_size(nd);
     mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(
         out_dofs, this->alpha_d_span.data(), this->detJ_geom_d_span.data(),
-        this->dofmap_d_span.data(), this->phi_d_span.data(), global_coefficient);
+        this->dofmap_d_span.data(), this->phi_d_span.data(),
+        global_coefficient);
 
     thrust::transform(thrust::device, diag_inv.array().begin(),
                       diag_inv.array().begin() + diag_inv.map()->size_local(),
@@ -219,6 +222,10 @@ public:
 
     this->phi_d_span =
         copy_to_device(phi_table.begin(), phi_table.end(), this->phi_d, "phi");
+
+    this->phiT_d_span =
+        copy_to_device(phi_table.begin(), phi_table.end(), this->phiT_d, "phiT");
+
     std::cout << "Precomputing geometry..." << std::endl;
     std::vector<U> detJ_geom = compute_geometry(mesh, qpts, qwts);
 
@@ -227,7 +234,8 @@ public:
   }
 
   template <typename Vector>
-  void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
+  void operator()(Vector &in, Vector &out, U global_coefficient = 1.,
+                  GpuStream stream = 0, int bs = nq, int cells_per_block = 1) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -237,12 +245,29 @@ public:
     assert(in.array().size() == out.mutable_array().size());
     assert(detJ_geom_d_span.size() == this->number_of_local_cells * nq);
 
-    dim3 grid_size(this->number_of_local_cells);
-    dim3 block_size(nq);
-    mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
-        in_dofs, out_dofs, this->alpha_d_span.data(),
-        this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
-        this->phi_d_span.data(), global_coefficient);
+    // dim3 block_size(nq);
+    // dim3 grid_size(this->number_of_local_cells);
+
+    dim3 block_size(bs, cells_per_block);
+    dim3 grid_size((this->number_of_local_cells + cells_per_block - 1) /
+                   cells_per_block);
+
+    size_t shmem = sizeof(T) * (nd + nq) * cells_per_block;
+    // size_t shmem = sizeof(T) * ((nd + nq) * cells_per_block + nd * nq); //
+    // slices + φ
+
+    // std::cout << "shmem_size / block =" << shmem << std::endl;
+    // std::cout << "total shmem [KB] ="
+    //           << shmem * (this->number_of_local_cells + cells_per_block - 1)
+    //           /
+    //                  cells_per_block / 1024.
+    //           << std::endl;
+    mass_operator_baseline_optiT<T, nd, nq>
+        <<<grid_size, block_size, shmem, stream>>>(
+            in_dofs, out_dofs, this->alpha_d_span.data(),
+            this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
+            this->phi_d_span.data(), this->phiT_d_span.data(),
+            global_coefficient, this->number_of_local_cells);
     check_device_last_error();
   }
 
@@ -255,15 +280,17 @@ public:
                       diag_inv.mutable_array().begin(),
                       [] __host__ __device__(T yi) { return 1.0 / yi; });
   }
- 
-  template <typename Vector> void get_diag(Vector &diag, U global_coefficient = 1.) {
+
+  template <typename Vector>
+  void get_diag(Vector &diag, U global_coefficient = 1.) {
     T *out_dofs = diag.mutable_array().data();
 
     dim3 grid_size(this->number_of_local_cells);
     dim3 block_size(nd);
     mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(
         out_dofs, this->alpha_d_span.data(), this->detJ_geom_d_span.data(),
-        this->dofmap_d_span.data(), this->phi_d_span.data(), global_coefficient);
+        this->dofmap_d_span.data(), this->phi_d_span.data(),
+        global_coefficient);
     check_device_last_error();
   }
 
@@ -271,11 +298,11 @@ public:
   //   auto &coeff_tvector = coeff.thrust_vector();
 
   //   assert(coeff_tvector.size() == alpha_d.size());
-  //   thrust::copy(coeff_tvector.begin(), coeff_tvector.end(), alpha_d.begin());
+  //   thrust::copy(coeff_tvector.begin(), coeff_tvector.end(),
+  //   alpha_d.begin());
   // }
 
   // thrust::device_vector<T> &get_coefficient() { return alpha_d; }
-
 
 private:
   static constexpr int N = P + 1;
@@ -294,6 +321,9 @@ private:
   thrust::device_vector<T> phi_d;
   std::span<const T> phi_d_span;
 
+  thrust::device_vector<T> phiT_d;
+  std::span<const T> phiT_d_span;
+
   thrust::device_vector<T> alpha_d;
   std::span<const T> alpha_d_span;
 
@@ -304,7 +334,6 @@ private:
   std::span<const std::int32_t> dofmap_d_span;
 };
 
-
 /// Computes M(q)p
 template <typename T, int P, int Q, typename U = T>
 class NonlinearMatFreeMassBaseline3D {
@@ -313,7 +342,8 @@ public:
   using quad_rule = std::pair<std::vector<T>, std::vector<T>>;
 
   NonlinearMatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
-                        std::shared_ptr<fem::FunctionSpace<U>> V, U alpha)
+                                 std::shared_ptr<fem::FunctionSpace<U>> V,
+                                 U alpha)
       : mesh(mesh), V(V) {
     auto dofmap = V->dofmap();
     auto map = dofmap->index_map;
@@ -324,8 +354,8 @@ public:
   }
 
   NonlinearMatFreeMassBaseline3D(std::shared_ptr<mesh::Mesh<U>> mesh,
-                        std::shared_ptr<fem::FunctionSpace<U>> V,
-                        std::span<const U> alpha)
+                                 std::shared_ptr<fem::FunctionSpace<U>> V,
+                                 std::span<const U> alpha)
       : mesh(mesh), V(V) {
     init(alpha);
   }
@@ -379,7 +409,8 @@ public:
                                             this->detJ_geom_d, "detJ_geom");
 
     // Nonlinear coeff is a vector in V
-    coeff_d.resize(dofmap->index_map->size_local() + dofmap->index_map->num_ghosts());
+    coeff_d.resize(dofmap->index_map->size_local() +
+                   dofmap->index_map->num_ghosts());
   }
 
   template <typename Vector>
@@ -413,16 +444,18 @@ public:
                       diag_inv.mutable_array().begin(),
                       [] __host__ __device__(T yi) { return 1.0 / yi; });
   }
- 
-  template <typename Vector> void get_diag(Vector &diag, U global_coefficient = 1.) {
+
+  template <typename Vector>
+  void get_diag(Vector &diag, U global_coefficient = 1.) {
     T *out_dofs = diag.mutable_array().data();
     const T *in_dofs = thrust::raw_pointer_cast(coeff_d.data());
 
     dim3 grid_size(this->number_of_local_cells);
     dim3 block_size(nd);
-    nonlinear_mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(in_dofs,
-        out_dofs, this->alpha_d_span.data(), this->detJ_geom_d_span.data(),
-        this->dofmap_d_span.data(), this->phi_d_span.data(), global_coefficient);
+    nonlinear_mass_diagonal<T, nd, nq><<<grid_size, block_size>>>(
+        in_dofs, out_dofs, this->alpha_d_span.data(),
+        this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
+        this->phi_d_span.data(), global_coefficient);
     check_device_last_error();
   }
 
@@ -434,7 +467,6 @@ public:
   }
 
   thrust::device_vector<T> &get_coefficient() { return coeff_d; }
-
 
 private:
   static constexpr int N = P + 1;
@@ -764,7 +796,8 @@ public:
   }
 
   template <typename Vector>
-  void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
+  void operator()(Vector &in, Vector &out, U global_coefficient = 1.,
+                  GpuStream stream = 0) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -774,12 +807,14 @@ public:
     if (this->number_of_local_facets != 0) {
       dim3 grid_size(this->number_of_local_facets);
       dim3 block_size(max(nq, nd));
-      facets_mass_operator_baseline<T, nd, nq><<<grid_size, block_size>>>(
-          in_dofs, out_dofs, this->cell_facet_d_span.data(),
-          this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
-          this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
-          this->faces_dofs_d_span.data(), this->n_faces, global_coefficient);
-      check_device_last_error();
+      facets_mass_operator_baseline<T, nd, nq>
+          <<<grid_size, block_size, 0, stream>>>(
+              in_dofs, out_dofs, this->cell_facet_d_span.data(),
+              this->detJ_geom_d_span.data(), this->alpha_d_span.data(),
+              this->dofmap_d_span.data(), this->facets_phi_d_span.data(),
+              this->faces_dofs_d_span.data(), this->n_faces,
+              global_coefficient);
+      // check_device_last_error();
     }
   }
 

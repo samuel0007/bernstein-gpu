@@ -5,7 +5,9 @@
 *.png
 *.pyc
 *.msh
-
+log_*.txt
+*.pdf
+*.csv
 
 *.ncu-rep
 

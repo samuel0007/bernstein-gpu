@@ -75,7 +75,8 @@ public:
     assert(geom_d.size() == this->number_of_local_cells * 3 * nq);
   }
 
-  template <typename Vector> void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
+  template <typename Vector>
+  void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -93,7 +94,8 @@ public:
     check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv,  U global_coefficient = 1.) {
+  template <typename Vector>
+  void get_diag_inverse(Vector &diag_inv, U global_coefficient = 1.) {
     assert(false && "todo for jacobi preconditioning of cg");
   }
 
@@ -192,7 +194,9 @@ public:
   }
 
   template <typename Vector>
-  void operator()(Vector &in, Vector &out, U global_coefficient = 1.) {
+  void operator()(Vector &in, Vector &out, U global_coefficient = 1.,
+                  cudaStream_t stream = 0., int bs = nq,
+                  int cells_per_block = 1) {
     in.scatter_fwd();
 
     const T *in_dofs = in.array().data();
@@ -200,34 +204,46 @@ public:
     assert(in.array().size() == out.mutable_array().size());
 
     assert(nq >= nd);
-    dim3 grid_size(this->number_of_local_cells);
-    dim3 block_size(nq);
-    kernels::stiffness::stiffness_operator3D<T, nd, nq>
-        <<<grid_size, block_size>>>(
+    // dim3 grid_size(this->number_of_local_cells);
+    // dim3 block_size(nq);
+
+    dim3 block_size(bs, cells_per_block);
+    dim3 grid_size((this->number_of_local_cells + cells_per_block - 1) / cells_per_block);
+
+    // size_t shmem = sizeof(T) * (nd + 3 * nq) * cells_per_block;
+    size_t shmem = sizeof(T) * ( (nd + 3*nq) * cells_per_block + 3*nd*nq );
+
+
+    kernels::stiffness::stiffness_operator3D_optimem<T, nd, nq>
+        <<<grid_size, block_size, shmem, stream>>>(
             out_dofs, in_dofs, this->alpha_d_span.data(),
             this->geom_d_span.data(), this->dofmap_d_span.data(),
-            this->dphi_d_span.data(), global_coefficient);
-    check_device_last_error();
+            this->dphi_d_span.data(), global_coefficient, this->number_of_local_cells);
+    // check_device_last_error();
   }
 
-  template <typename Vector> void get_diag_inverse(Vector &diag_inv,  U global_coefficient = 1.) {
+  template <typename Vector>
+  void get_diag_inverse(Vector &diag_inv, U global_coefficient = 1.) {
     diag_inv.set(0.);
     this->get_diag(diag_inv, global_coefficient);
     thrust::transform(thrust::device, diag_inv.mutable_array().begin(),
-                      diag_inv.mutable_array().begin() + diag_inv.map()->size_local(),
+                      diag_inv.mutable_array().begin() +
+                          diag_inv.map()->size_local(),
                       diag_inv.mutable_array().begin(),
                       [] __host__ __device__(T yi) { return 1.0 / yi; });
   }
 
-  template <typename Vector> void get_diag(Vector &diag, U global_coefficient = 1.) {
+  template <typename Vector>
+  void get_diag(Vector &diag, U global_coefficient = 1.) {
     T *out_dofs = diag.mutable_array().data();
 
     dim3 grid_size(this->number_of_local_cells);
     dim3 block_size(nd);
-    kernels::stiffness::stiffness_operator3D_diagonal<T, nd, nq><<<grid_size, block_size>>>(
-        out_dofs, this->alpha_d_span.data(), this->geom_d_span.data(),
-        this->dofmap_d_span.data(), this->dphi_d_span.data(),
-        global_coefficient);
+    kernels::stiffness::stiffness_operator3D_diagonal<T, nd, nq>
+        <<<grid_size, block_size>>>(
+            out_dofs, this->alpha_d_span.data(), this->geom_d_span.data(),
+            this->dofmap_d_span.data(), this->dphi_d_span.data(),
+            global_coefficient);
     check_device_last_error();
   }
 

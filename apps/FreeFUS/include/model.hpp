@@ -1,6 +1,7 @@
 #pragma once
 
 #include "types.hpp"
+#include "profiler.hpp"
 
 namespace freefus {
 
@@ -216,6 +217,7 @@ public:
 
   // LHS: (M+M_Γ) + (C+C_Γ)*gamma*dt + K*beta*dt2) @ in
   template <typename Vector> void operator()(Vector &in, Vector &out) {
+    PROF_GPU_SCOPE("JACOBIAN", 7, 0);
     out.set(0.);
     (*M_action_ptr)(in, out);
     (*Mgamma_action_ptr)(in, out);
@@ -228,6 +230,7 @@ public:
   void set_dt(U dt) { m_dt = dt; }
 
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+    PROF_GPU_SCOPE("PC", 7, 0);
     diag_inv.set(0.);
     M_action_ptr->get_diag(diag_inv);
     Mgamma_action_ptr->get_diag(diag_inv);
@@ -240,6 +243,7 @@ public:
   // RHS: F - (C+C_Γ) @ ud - K @ u
   template <typename Vector>
   void rhs(Vector &u, Vector &ud, Vector &g, Vector &gd, Vector &out) {
+    PROF_GPU_SCOPE("RHS", 7, 0);
     out.set(0.);
     (*F_action_ptr)(g, out);
     (*Fd_action_ptr)(gd, out);
@@ -336,6 +340,7 @@ public:
   template <typename Vector>
   void residual(Vector &u, Vector &ud, Vector &udd, Vector &g, Vector &gd,
                 Vector &out) {
+    PROF_GPU_SCOPE("RESIDUAL", 7, 0);
     out.set(0.);
     // - LHS
     // (M(u) + M + Mgamma) @ udd
@@ -362,6 +367,7 @@ public:
 
   // - Jacobian:  - ((M+M_Γ) + (C+C_Γ)*gamma*dt + K*beta*dt2) @ in
   template <typename Vector> void operator()(Vector &in, Vector &out) {
+    PROF_GPU_SCOPE("JACOBIAN", 7, 0);
     out.set(0.);
     // Linear Jacobian
     (*M_action_ptr)(in, out);
@@ -380,6 +386,7 @@ public:
 
   // Get diagonal inverse of jacobian
   template <typename Vector> void get_diag_inverse(Vector &diag_inv) {
+    PROF_GPU_SCOPE("PC", 7, 0);
     diag_inv.set(0.);
     M_action_ptr->get_diag(diag_inv);
     Mgamma_action_ptr->get_diag(diag_inv);

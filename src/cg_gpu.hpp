@@ -4,6 +4,7 @@
 #pragma once
 
 #include "vector.hpp"
+#include "profiler.hpp"
 #include <algorithm>
 #include <chrono>
 #include <dolfinx/common/IndexMap.h>
@@ -155,6 +156,8 @@ public:
     // _diag_inv->set(0.);
     // _y = std::make_unique<Vector>(_map, _bs);
     // _p = std::make_unique<Vector>(_map, _bs);
+    PROF_GPU_SCOPE("CG SOLVE", 5, 0);
+    PROF_GPU_START("CG PC", 6, 0);
     
     MPI_Comm comm = _map->comm();
     int rank;
@@ -165,11 +168,14 @@ public:
     else
       (*_diag_inv).set(1.0);
 
+    PROF_GPU_STOP("CG PC");
+
     // TODO: check sizes
 
     // Compute initial residual r0 = b - Ax0
     _y->set(0.);
     A(x, *_y);
+
     axpy(*_r, T(-1), *_y, b);
 
     acc::pointwise_mult(*_p, *_r, *_diag_inv);
@@ -185,18 +191,28 @@ public:
 
     int k = 0;
     auto start = std::chrono::high_resolution_clock::now();
+    PROF_GPU_START("CG IT", 8, 0);
+
     while (k < _max_iter)
     {
       add_profiling_annotation("cg solver iteration");
       ++k;
+      PROF_GPU_START("CG MATVEC", 9, 0);
+
 
       // MatVec
       // y = A.p;
       _y->set(0.);
       A(*_p, *_y);
+      PROF_GPU_STOP("CG MATVEC");
+      PROF_GPU_START("CG REDUCTION 1", 9, 0);
 
       // Calculate alpha = r.r/p.y
       const T alpha = rnorm / acc::inner_product(*_p, *_y);
+
+      PROF_GPU_STOP("CG REDUCTION 1");
+
+      PROF_GPU_START("CG AXPY 1", 9, 0);
 
       // Update x and r
       // Update x (x <- x + alpha*p)
@@ -204,6 +220,9 @@ public:
 
       // Update r (r <- r - alpha*y)
       acc::axpy(*_r, -alpha, *_y, *_r);
+
+      PROF_GPU_STOP("CG AXPY 1");
+      PROF_GPU_START("CG REDUCTION 2", 9, 0);
 
       // Using y as a temporary for M^-1(r)
       T rnorm_new;
@@ -217,6 +236,10 @@ public:
 
       const T beta = rnorm_new / rnorm;
       rnorm = rnorm_new;
+
+      PROF_GPU_STOP("CG REDUCTION 2");
+      PROF_GPU_START("CG AXPY 2", 9, 0);
+
 
       spdlog::debug("CG: {} rnorm = {}", k, rnorm);
 
@@ -243,7 +266,10 @@ public:
         _residuals.push_back(rnorm);
       }
       remove_profiling_annotation("cg solver iteration");
+      PROF_GPU_STOP("CG AXPY 2");
     }
+    PROF_GPU_STOP("CG IT");
+
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
     // std::cout << "CG loop only time : " << duration.count() << std::endl;

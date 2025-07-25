@@ -50,7 +50,8 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.mesh_filepath = fs::path(DATA_DIR) / cfg.mesh_name / "mesh.xdmf";
   cfg.mesh_dir = fs::path(DATA_DIR) / cfg.mesh_name;
   cfg.lvariant = str_to_basixlv.at(vm["polynomial-basis"].as<std::string>());
-  cfg.output_filepath = fs::path(DATA_DIR) / cfg.mesh_name / vm["output-path"].as<std::string>();
+  cfg.output_filepath =
+      fs::path(DATA_DIR) / cfg.mesh_name / vm["output-path"].as<std::string>();
   {
     auto ext = fs::path(cfg.output_filepath).extension();
     if (ext != ".bp")
@@ -82,7 +83,7 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
     throw std::runtime_error("Invalid model and timestepper configuration");
   }
   cfg.cg_tol = vm["cg-tol"].as<double>();
-  cfg.cg_max_steps = vm["cg-maxsteps"].as<int>();
+  cfg.cg_max_steps = vm["cg-max-steps"].as<int>();
   cfg.nonlinear_tol = vm["nonlinear-tol"].as<double>();
   cfg.window_length = vm["window-length"].as<double>();
 
@@ -104,7 +105,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
       ("model-type", po::value<int>()->default_value(1), "Model type [1-2]")
       ("timestepping-type", po::value<int>()->default_value(1), "Timestepping type [1-2]")
-      ("sample-harmonic", po::value<int>()->default_value(1), "Number of harmonics to sample at the end of the simulation.")
+      ("sample-harmonic", po::value<int>()->default_value(5), "Number of harmonics to sample at the end of the simulation.")
       ("CFL", po::value<T>()->default_value(0.5), "CFL number")
       ("source-frequency", po::value<T>()->default_value(0.1e6), "Source frequency (Hz)")
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
@@ -115,12 +116,13 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("insitu", po::value<bool>()->default_value(true), "Insitu visualisation")
       ("insitu-output-steps", po::value<int>()->default_value(50), "Number of insitu output steps")
       ("insitu-with-yaml", po::value<bool>()->default_value(true), "Search for an ascent_actions.yaml file in mesh dir.")
-      ("cg-tol", po::value<T>()->default_value(1e-8), "Tolerance of CG solver")
-      ("cg-maxsteps", po::value<int>()->default_value(200), "Max number of CG iterations")
+      ("cg-tol", po::value<T>()->default_value(1e-10), "Tolerance of CG solver")
+      ("cg-max-steps", po::value<int>()->default_value(200), "Max number of CG iterations")
       ("nonlinear-tol", po::value<T>()->default_value(1e-6), "Tolerance of nonlinear solver")
       ("sample-nx", po::value<int>()->default_value(200), "Sampling in X direction")
       ("sample-nz", po::value<int>()->default_value(200), "Sampling in Z direction")
       ("sampling-periods", po::value<int>()->default_value(4), "Sampling time (periods)")
+      ("refinement-level", po::value<int>()->default_value(1), "Uniformly refine input mesh (level). By default, the mesh is not refined")
       ("log-level", po::value<std::string>()->default_value("info"),
        "Log level: trace, debug, info, warn, err, critical, off");
   // clang-format on

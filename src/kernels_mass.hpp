@@ -166,12 +166,12 @@ __launch_bounds__(Q *Q) __global__
 }
 
 template <typename T, int nd, int nq>
-__global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
-                                       T *__restrict__ out_dofs,
-                                       const T *__restrict__ alpha_cells,
-                                       const T *__restrict__ detJ_cells,
-                                       const std::int32_t *__restrict__ dofmap,
-                                       const T *__restrict__ phi, T global_coefficient) {
+__global__ void
+mass_operator_baseline(const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
+                       const T *__restrict__ alpha_cells,
+                       const T *__restrict__ detJ_cells,
+                       const std::int32_t *__restrict__ dofmap,
+                       const T *__restrict__ phi, T global_coefficient) {
   const int tx = threadIdx.x;
   const int cell_idx = blockIdx.x;
   int g_dof_idx = -1;
@@ -216,13 +216,200 @@ __global__ void mass_operator_baseline(const T *__restrict__ in_dofs,
 }
 
 template <typename T, int nd, int nq>
-__global__ void nonlinearmass_operator_baseline(const T *__restrict__ in_dofs1,
-                                      const T *__restrict__ in_dofs2,
-                                       T *__restrict__ out_dofs,
-                                       const T *__restrict__ alpha_cells,
-                                       const T *__restrict__ detJ_cells,
-                                       const std::int32_t *__restrict__ dofmap,
-                                       const T *__restrict__ phi, T global_coefficient) {
+__global__ void mass_operator_baseline_opti(
+    const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
+    const T *__restrict__ alpha_cells, const T *__restrict__ detJ_cells,
+    const std::int32_t *__restrict__ dofmap, const T *__restrict__ phi,
+    T global_coefficient, int ncells) {
+  const int tx = threadIdx.x;
+  const int stride = blockDim.x;
+  const int c_local = threadIdx.y;
+  const int cells_pb = blockDim.y;
+  const int cell_idx = blockIdx.x * cells_pb + c_local;
+  const bool active = (cell_idx < ncells);
+
+  // --- shared memory per cell: nd DOFs + nq qvals ---
+  extern __shared__ T sh[];
+  const int per_cell = nd + nq;
+  T *in_local_dofs = sh + c_local * per_cell;
+  T *qvals = in_local_dofs + nd;
+
+  __syncthreads();
+
+  // -------- load DOFs (stride over nd) --------
+  if (active) {
+    for (int i = tx; i < nd; i += stride) {
+      int g_dof_idx = dofmap[cell_idx * nd + i];
+      in_local_dofs[i] = in_dofs[g_dof_idx];
+    }
+  }
+  __syncthreads();
+
+  // -------- phase 1: compute qvals (stride over nq) --------
+  if (active) {
+    for (int iq = tx; iq < nq; iq += stride) {
+      T qval = T(0);
+      for (int i = 0; i < nd; ++i)
+        qval += phi[iq * nd + i] * in_local_dofs[i];
+
+      const T detJ_abs = detJ_cells[iq + cell_idx * nq];
+      const T alpha = alpha_cells[cell_idx];
+
+      qvals[iq] = alpha * qval * detJ_abs;
+    }
+  }
+  __syncthreads();
+
+  // -------- phase 2: accumulate back to DOFs (stride over nd) --------
+  if (active) {
+    for (int i = tx; i < nd; i += stride) {
+      T fval = T(0);
+      for (int iq = 0; iq < nq; ++iq)
+        fval += qvals[iq] * phi[iq * nd + i];
+
+      const int g_dof_idx = dofmap[cell_idx * nd + i];
+      atomicAdd(&out_dofs[g_dof_idx], fval * global_coefficient);
+    }
+  }
+}
+
+template <typename T, int nd, int nq>
+__global__ void mass_operator_baseline_optiT(
+    const T *__restrict__ in_dofs,  T *__restrict__ out_dofs,
+    const T *__restrict__ alpha_cells, const T *__restrict__ detJ_cells,
+    const std::int32_t *__restrict__ dofmap,
+    const T *__restrict__ phi,      //  layout:  [q][i]          (row‑major)
+    const T *__restrict__ phiT,     //  layout:  [i][q] (transpose) – NEW
+    T  global_coefficient, int ncells)
+{
+  const int tx        = threadIdx.x;
+  const int stride    = blockDim.x;
+  const int c_local   = threadIdx.y;
+  const int cells_pb  = blockDim.y;
+  const int cell_idx  = blockIdx.x * cells_pb + c_local;
+  const bool active   = (cell_idx < ncells);
+
+  /* shared: nd DOFs + nq qvals per cell */
+  extern __shared__ T sh[];
+  const int per_cell  = nd + nq;
+  T *in_local_dofs = sh + c_local * per_cell;   // [0..nd)
+  T *qvals         = in_local_dofs + nd;        // [0..nq)
+
+  __syncthreads();
+
+  /* ---------- load DOFs ---------- */
+  if (active) {
+    for (int i = tx; i < nd; i += stride) {
+      int g = dofmap[cell_idx * nd + i];
+      in_local_dofs[i] = in_dofs[g];
+    }
+  }
+  __syncthreads();
+
+  /* ---------- phase‑1 : q‑point loop ---------- */
+  if (active) {
+    for (int iq = tx; iq < nq; iq += stride) {
+      T qval = T(0);
+      for (int i = 0; i < nd; ++i)
+        qval += phi[iq * nd + i] * in_local_dofs[i];
+
+      const T detJ = detJ_cells[iq + cell_idx * nq];
+      const T a    = alpha_cells[cell_idx];
+      qvals[iq]    = a * qval * detJ;
+    }
+  }
+  __syncthreads();
+
+  /* ---------- phase‑2 : dof loop (now uses phiT for coalesced reads) ---------- */
+  if (active) {
+    for (int i = tx; i < nd; i += stride) {
+      T fval = T(0);
+      for (int iq = 0; iq < nq; ++iq)
+        fval += qvals[iq] * phiT[i * nq + iq];
+
+      int g = dofmap[cell_idx * nd + i];
+      atomicAdd(&out_dofs[g], fval * global_coefficient);
+    }
+  }
+}
+
+template <typename T, int nd, int nq>
+__global__ void mass_operator_baseline_optimem(
+    const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
+    const T *__restrict__ alpha_cells, const T *__restrict__ detJ_cells,
+    const int *__restrict__ dofmap,
+    const T *__restrict__ phi, // size nq*nd (row‑major q)
+    T global_coefficient, int ncells) {
+  /* ---------------- block / thread indexing ---------------- */
+  const int tx = threadIdx.x;
+  const int stride = blockDim.x;
+  const int c_local = threadIdx.y;
+  const int cells_pb = blockDim.y;
+  const int cell_idx = blockIdx.x * cells_pb + c_local;
+  const bool active = (cell_idx < ncells);
+
+  /* ---------------- shared‑memory layout -------------------
+   *  [ per‑cell slices | shared copy of φ ]
+   *  per‑cell : nd DOFs + nq qvals
+   */
+  extern __shared__ T sh[];
+  const int slice_sz = nd + nq;               // per‑cell
+  const int phi_offset = slice_sz * cells_pb; // start of φ copy
+  const int per_cell_off = c_local * slice_sz;
+
+  T *in_local_dofs = sh + per_cell_off; /* nd  */
+  T *qvals = in_local_dofs + nd;        /* nq  */
+  T *phi_s = sh + phi_offset;           /* nd*nq (for ALL cells) */
+
+  /* ---------------- step 0 : copy φ to shared once ---------------- */
+  // All threads across whole block cooperate (only once per kernel launch)
+  for (int idx = threadIdx.y * stride + tx; idx < nd * nq;
+       idx += blockDim.y * stride)
+    phi_s[idx] = phi[idx];
+  __syncthreads(); // φ ready for everybody
+
+  /* ---------------- load DOFs ---------------- */
+  if (active) {
+    for (int i = tx; i < nd; i += stride) {
+      const int gd = dofmap[cell_idx * nd + i];
+      in_local_dofs[i] = in_dofs[gd];
+    }
+  }
+  __syncthreads();
+
+  /* ---------------- phase 1 : qvals ---------------- */
+  if (active) {
+    const T alpha = alpha_cells[cell_idx];
+    for (int q = tx; q < nq; q += stride) {
+      T acc = 0;
+      for (int k = 0; k < nd; ++k)
+        acc += phi_s[q * nd + k] * in_local_dofs[k];
+
+      const T detJ = detJ_cells[q + cell_idx * nq];
+      qvals[q] = alpha * acc * detJ;
+    }
+  }
+  __syncthreads();
+
+  /* ---------------- phase 2 : scatter back ---------------- */
+  if (active) {
+    for (int k = tx; k < nd; k += stride) {
+      T f = 0;
+      for (int q = 0; q < nq; ++q)
+        f += qvals[q] * phi_s[q * nd + k];
+
+      const int gd = dofmap[cell_idx * nd + k];
+      atomicAdd(&out_dofs[gd], f * global_coefficient);
+    }
+  }
+}
+
+template <typename T, int nd, int nq>
+__global__ void nonlinearmass_operator_baseline(
+    const T *__restrict__ in_dofs1, const T *__restrict__ in_dofs2,
+    T *__restrict__ out_dofs, const T *__restrict__ alpha_cells,
+    const T *__restrict__ detJ_cells, const std::int32_t *__restrict__ dofmap,
+    const T *__restrict__ phi, T global_coefficient) {
   const int tx = threadIdx.x;
   const int cell_idx = blockIdx.x;
   int g_dof_idx = -1;
@@ -251,7 +438,7 @@ __global__ void nonlinearmass_operator_baseline(const T *__restrict__ in_dofs1,
     qval1 += phi[tx * nd + i] * in_local_dofs1[i];
     qval2 += phi[tx * nd + i] * in_local_dofs2[i];
   }
- 
+
   qvals[tx] = alpha * qval1 * qval2 * detJ_abs;
   __syncthreads();
   // if(cell_idx == 0)
@@ -338,8 +525,7 @@ __global__ void facets_mass_operator_baseline(
 
 template <typename T, int nd, int nq>
 __global__ void mass_exterior_diagonal(
-    T *__restrict__ out_dofs,
-    const std::int32_t *__restrict__ cell_facet,
+    T *__restrict__ out_dofs, const std::int32_t *__restrict__ cell_facet,
     const T *__restrict__ detJ_facets, const T *__restrict__ alpha_cells,
     const std::int32_t *__restrict__ dofmap, const T *__restrict__ facets_phi,
     const std::int32_t *__restrict__ faces_dofs, int n_faces,
@@ -355,7 +541,8 @@ __global__ void mass_exterior_diagonal(
   T qval = 0.;
   for (int i = 0; i < nq; ++i) {
     T phi_l = phi[i * nd + tx];
-    qval += phi_l * phi_l * detJ_facets[tx + local_face_idx * nq + cell_idx * n_faces * nq];
+    qval += phi_l * phi_l *
+            detJ_facets[tx + local_face_idx * nq + cell_idx * n_faces * nq];
   }
   atomicAdd(&out_dofs[g_dof_idx], qval * alpha * global_coefficient);
 }
@@ -381,12 +568,12 @@ __global__ void mass_diagonal(T *__restrict__ out_dofs,
 }
 
 template <typename T, int nd, int nq>
-__global__ void nonlinear_mass_diagonal(const T *__restrict__ in_dofs,
-                              T *__restrict__ out_dofs,
-                              const T *__restrict__ alpha_cells,
-                              const T *__restrict__ detJ_cells,
-                              const std::int32_t *__restrict__ dofmap,
-                              const T *__restrict__ phi, T global_coefficient) {
+__global__ void
+nonlinear_mass_diagonal(const T *__restrict__ in_dofs, T *__restrict__ out_dofs,
+                        const T *__restrict__ alpha_cells,
+                        const T *__restrict__ detJ_cells,
+                        const std::int32_t *__restrict__ dofmap,
+                        const T *__restrict__ phi, T global_coefficient) {
   const int tx = threadIdx.x;
   const int cell_idx = blockIdx.x;
   int g_dof_idx = dofmap[tx + nd * cell_idx];
@@ -399,7 +586,8 @@ __global__ void nonlinear_mass_diagonal(const T *__restrict__ in_dofs,
     qval += phi_l * phi_l * detJ_cells[i + cell_idx * nq];
   }
 
-  atomicAdd(&out_dofs[g_dof_idx], qval * alpha * global_coefficient * in_local_dof);
+  atomicAdd(&out_dofs[g_dof_idx],
+            qval * alpha * global_coefficient * in_local_dof);
 }
 
 template <typename T, int Q> __constant__ T qwts2_d[Q];

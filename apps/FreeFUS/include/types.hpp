@@ -1,6 +1,7 @@
 #pragma once
 #include "mass_baseline.hpp"
 #include "stiffness_baseline.hpp"
+#include "stiffness_sf.hpp"
 #include <basix/finite-element.h>
 
 
@@ -102,6 +103,7 @@ template <typename T, typename U, int P, int Q, int D>
 using StiffnessAction =
     std::conditional_t<D == 2, acc::MatFreeStiffness<T, P, Q, U>,
                        acc::MatFreeStiffness3D<T, P, Q, U>>;
+                      //  acc::MatFreeStiffnessSF3D<T, P, Q, U>>;
 
 template <typename T, typename U, int P, int Q, int D>
 using ExteriorMassAction =

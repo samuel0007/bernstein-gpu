@@ -5,8 +5,8 @@ option(cpu "Build for CPUs"	off)
 option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
-set(polynomial_degree 4 CACHE STRING "Polynomial degree")
-set(scalar_type "float64" CACHE STRING "Scalar type")
+set(polynomial_degree 2 CACHE STRING "Polynomial degree")
+set(scalar_type "float32" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 message(STATUS "Scalar type: ${scalar_type}")
 
@@ -72,7 +72,7 @@ if (DEFINED ENV{CRAYPE_VERSION})
   set(CMAKE_HIP_FLAGS "${CMAKE_HIP_FLAGS} -I/opt/cray/pe/mpich/8.1.27/ofi/gnu/9.1/include")
 endif()
 
-set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
+set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -march=native -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo -Xptxas=-v")
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -std=c++20 -O3 -DNDEBUG --extended-lambda --expt-relaxed-constexpr -lineinfo")
 # set(CMAKE_CUDA_FLAGS "${CMAKE_CUDA_FLAGS} -G -std=c++20 --extended-lambda --expt-relaxed-constexpr")
 
@@ -168,10 +168,12 @@ add_example(mat_free_exterior_mass3D ON)
 add_example(mat_free_stiffness ON)
 add_example(mat_free_stiffness3D ON)
 add_example(mat_free_RHS ON)
+add_example(mat_free_newmark ON)
 
 # Solvers
 add_example(mass_cg ON)
 add_example(mass3D_cg ON)
+add_example(newmark_cg ON)
 
 # Acoustics Examples
 add_example(planar_wave OFF)

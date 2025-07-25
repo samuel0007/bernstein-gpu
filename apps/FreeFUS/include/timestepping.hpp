@@ -5,6 +5,7 @@
 
 #include "types.hpp"
 #include "vector.hpp"
+#include "profiler.hpp"
 
 namespace freefus {
 
@@ -39,6 +40,8 @@ public:
 
   /// Evolve a solution under a model using a solver for a timestep dt
   void evolve(auto &model, auto &solver, U t, U dt) {
+    PROF_CPU_SCOPE("EVOLVE", 3);
+
     copy_d_to_d(*u, *u0);
     copy_d_to_d(*v, *v0);
 
@@ -150,6 +153,7 @@ public:
 
   /// Evolve a solution under a model using a solver for a timestep dt
   void evolve(auto &model, auto &solver, U t, U dt) {
+    PROF_CPU_SCOPE("EVOLVE", 3);
     delta_udd->set(0.);
     next_udd->set(0.);
     R->set(0.);
@@ -157,11 +161,14 @@ public:
     update_source(t + dt); // f(t + dt)
     const U dt2 = dt * dt;
     // Predictor
+    PROF_GPU_START("PREDICTOR", 4, 0);
     // 1. Displacement: u = u + ud * dt + udd * (0.5 - beta) * dt2;
     acc::axpy(*u, dt, *ud, *u );
     acc::axpy(*u, (0.5 - beta) * dt2, *udd, *u);
     // 2. Velocity: ud = ud + udd * (1 - gamma) * dt;
     acc::axpy(*ud, (1 - gamma) * dt, *udd, *ud);
+    PROF_GPU_STOP("PREDICTOR");
+    PROF_GPU_START("NONLINEAR SYSTEM", 4, 0);
 
     // acc::copy_d_to_d(*udd, *next_udd);
 
@@ -176,6 +183,7 @@ public:
     U residual_norm = acc::squared_norm(*R);
 
     while(residual_norm > TOL2) {
+      PROF_GPU_START("NONLINEAR ITERATION", 5, 0);
       delta_udd->set(0.);
 
       // Solve for newton update -J delta_udd = R
@@ -192,7 +200,11 @@ public:
       spdlog::info("solver its={}, residual_norm={}", solver_its, std::sqrt(residual_norm));
       linear_its += solver_its;
       ++nonlinear_its;
+      PROF_GPU_STOP("NONLINEAR ITERATION");
     }
+
+    PROF_GPU_STOP("NONLINEAR SYSTEM");
+
     // 1. Displacement: u = u + delta_udd * beta * dt2
     acc::axpy(*u, beta * dt2, *next_udd, *u);
     // 2. Velocity: ud = ud + delta_udd * gamma * dt
@@ -283,26 +295,33 @@ public:
 
   /// Evolve a solution under a model using a solver for a timestep dt
   void evolve(auto &model, auto &solver, U t, U dt) {
+    PROF_CPU_SCOPE("EVOLVE", 3);
+
     update_source(t + dt); // f(t + dt)
     const U dt2 = dt * dt;
+
+    PROF_GPU_START("PREDICTOR", 4, 0);
     // Predictor
     // 1. Displacement: u = u + ud * dt + udd * (0.5 - beta) * dt2;
     acc::axpy(*u, dt, *ud, *u);
     acc::axpy(*u, (0.5 - beta) * dt2, *udd, *u);
     // 2. Velocity: ud = ud + udd * (1 - gamma) * dt;
     acc::axpy(*ud, (1 - gamma) * dt, *udd, *ud);
-
+    PROF_GPU_STOP("PREDICTOR");
+    PROF_GPU_START("LSE", 4, 0);
     // Solve LSE
     model->set_dt(dt);
     model->rhs(*u, *ud, *g, *gd, *RHS);
     int solver_its = solver->solve(*model, *udd, *RHS, true);
     spdlog::info("solver its={}", solver_its);
-
+    PROF_GPU_STOP("LSE");
+    PROF_GPU_START("CORRECTOR", 4, 0);
     // Correctors
     // 1. Displacement:  u = u + udd * beta * dt2
     acc::axpy(*u, beta * dt2, *udd, *u);
     // 2. Velocity: ud = ud + udd * gamma * dt
     acc::axpy(*ud, gamma * dt, *udd, *ud);
+    PROF_GPU_STOP("CORRECTOR");
   }
 
   void get_solution(auto &solution) {

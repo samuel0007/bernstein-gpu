@@ -1,5 +1,5 @@
 // # Exterior Mass matrix operation
-#include "mat_free_stiffness3D.h"
+#include "mat_free_newmark.h"
 #include <algorithm>
 #include <basix/finite-element.h>
 #include <cmath>
@@ -14,8 +14,9 @@
 
 #include "src/geometry.hpp"
 #include "src/mesh.hpp"
+#include "src/newmark.hpp"
+#include "src/profiler.hpp"
 #include "src/quadrature.hpp"
-#include "src/stiffness_baseline.hpp"
 #include "src/stiffness_sf.hpp"
 #include "src/util.hpp"
 #include "src/vector.hpp"
@@ -45,7 +46,7 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
   desc.add_options()("help,h", "print usage message")
       ("nelements", po::value<int>()->default_value(3), "Number of elements (1D)")
       ("nreps", po::value<int>()->default_value(1), "number of repetitions")
-      ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator")
+      // ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator")
       ("block-size", po::value<int>()->default_value(64), "Compare result to CPU matrix operator")
       ("cells-per-block", po::value<int>()->default_value(1), "Compare result to CPU matrix operator");
   // clang-format on
@@ -68,20 +69,20 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   const int nelements = vm["nelements"].as<int>();
   const int nreps = vm["nreps"].as<int>();
-  const bool matrix_comparison = vm["matrix_comparison"].as<bool>();
   const int block_size = vm["block-size"].as<int>();
   const int cells_per_block = vm["cells-per-block"].as<int>();
+  // const bool matrix_comparison = vm["matrix_comparison"].as<bool>();
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
   auto mesh = std::make_shared<mesh::Mesh<T>>(mesh::create_box<T>(
-      comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}}, {nelements, nelements,
-      nelements}, mesh::CellType::tetrahedron,
+      comm, {{{0.0, 0.0, 0.0}, {1.0, 1.0, 1.0}}},
+      {nelements, nelements, nelements}, mesh::CellType::tetrahedron,
       mesh::create_cell_partitioner(mesh::GhostMode::none)));
   // auto coord_element =
   //     fem::CoordinateElement<T>(mesh::CellType::tetrahedron, 1);
-  // io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf", "r");
-  // auto mesh = std::make_shared<mesh::Mesh<T>>(
+  // io::XDMFFile fmesh(MPI_COMM_WORLD, std::string(DATA_DIR) + "/mesh.xdmf",
+  // "r"); auto mesh = std::make_shared<mesh::Mesh<T>>(
   //     fmesh.read_mesh(coord_element, mesh::GhostMode::none, "mesh"));
   auto element = basix::create_element<T>(
       basix::element::family::P, basix::cell::type::tetrahedron,
@@ -127,7 +128,6 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
     constexpr int N = polynomial_degree + 1;
     constexpr int K = (N + 2) * (N + 1) * N / 6; // Number of dofs on triangle
-
     std::cout << device_information();
     std::cout << "-----------------------------------\n";
     std::cout << "Polynomial degree: " << polynomial_degree << "\n";
@@ -142,15 +142,18 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     // std::cout << "Number of dofs-rank : " << ndofs_global / size << "\n";
     std::cout << "Number of repetitions: " << nreps << "\n";
     std::cout << "Scalar Type: " << fp_type << "\n";
+    std::cout << "Scalar Type: " << fp_type << "\n";
+    std::cout << "Block size: " << block_size << "\n";
+    std::cout << "Cells per block: " << cells_per_block << "\n";
     std::cout << "-----------------------------------\n";
     std::cout << std::flush;
   }
 
   // ----------- 2. GPU Matrix Free setup -----------
-  acc::MatFreeStiffness3D<T, polynomial_degree, quadrature_points>
-      gpu_action_baseline(mesh, V, alpha->x()->array());
-  // acc::MatFreeStiffnessSF3D<T, polynomial_degree, quadrature_points>
-  //     gpu_action_sf(mesh, V, alpha->x()->array());
+  // acc::MatFreeStiffness3D<T, polynomial_degree, quadrature_points>
+  //     gpu_action_baseline(mesh, V, alpha->x()->array());
+  acc::MatFreeNewmark3D<T, polynomial_degree, quadrature_points> gpu_action_sf(
+      mesh, V, alpha->x()->array());
 
   // ----------- 3. Matrix Free apply -----------
 
@@ -159,8 +162,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   la::Vector<T> &x = *(ui->x());
 
   for (double i = 0; i < ndofs_local; ++i) {
-    // x.mutable_array()[i] = sin(i / ndofs_local);
-    x.mutable_array()[i] = 1.;
+    x.mutable_array()[i] = sin(i / ndofs_local);
+    // x.mutable_array()[i] = 1.;
   }
 
   // GPU
@@ -170,33 +173,54 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   x_d.copy_from_host(x);
   std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
-  {
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
-      y_d.set(0);
-      gpu_action_baseline(x_d, y_d, 1., 0, block_size, cells_per_block);
-    }
-    device_synchronize();
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = stop - start;
-    std::cout << "Baseline Mat-free Matvec time: " << duration.count()
-              << std::endl;
-    std::cout << "Baseline Mat-free action Gdofs/s: "
-              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-  }
   // {
   //   auto start = std::chrono::high_resolution_clock::now();
   //   for (int i = 0; i < nreps; ++i) {
   //     y_d.set(0);
-  //     gpu_action_sf(x_d, y_d);
+  //     gpu_action_baseline(x_d, y_d);
   //   }
   //   device_synchronize();
   //   auto stop = std::chrono::high_resolution_clock::now();
   //   std::chrono::duration<double> duration = stop - start;
-  //   std::cout << "SF Mat-free Matvec time: " << duration.count() << std::endl;
-  //   std::cout << "SF Mat-free action Gdofs/s: "
-  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  //   std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+  //             << std::endl;
+  //   std::cout << "Baseline Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) <<
+  //             std::endl;
   // }
+  {
+    // std::vector<int> block_sizes = {};
+    // std::vector<int> cells_per_block = {1, 2, 3, 4, 5, 6, 7, 8};
+
+    // for(auto block_size: block_sizes) {
+
+    // }
+    auto start = std::chrono::high_resolution_clock::now();
+    for (int i = 0; i < nreps; ++i) {
+      y_d.set(0);
+      // gpu_action_sf(x_d, y_d, 1., 0, 8);
+      // gpu_action_sf(x_d, y_d, 1., 0, 16);
+      // gpu_action_sf(x_d, y_d, 1., 0, 23);
+      // gpu_action_sf(x_d, y_d, 1., 0, 24);
+      // gpu_action_sf(x_d, y_d, 1., 0, 25);
+      // gpu_action_sf(x_d, y_d, 1., 0, 28);
+      // gpu_action_sf(x_d, y_d, 1., 0, 32);
+      // gpu_action_sf(x_d, y_d, 1., 0, 64);
+      // gpu_action_sf(x_d, y_d, 1., 0, 96);
+      // gpu_action_sf(x_d, y_d, 1., 0, 128);
+      // gpu_action_sf(x_d, y_d, 1., 0, 160);
+      // gpu_action_sf(x_d, y_d, 1., 0, 177);
+      // gpu_action_sf(x_d, y_d, 1., 0, 192);
+
+      gpu_action_sf(x_d, y_d, 1., 0, block_size, cells_per_block);
+    }
+    device_synchronize();
+    auto stop = std::chrono::high_resolution_clock::now();
+    std::chrono::duration<double> duration = stop - start;
+    std::cout << "SF Mat-free Matvec time: " << duration.count() << std::endl;
+    std::cout << "SF Mat-free action Gdofs/s: "
+              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  }
   // {
   //     auto start = std::chrono::high_resolution_clock::now();
   //     for (int i = 0; i < nreps; ++i)
@@ -236,7 +260,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   //     // Compute action of A on x
   //     fem::pack_coefficients(*M, coeff);
-  //     fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
+  //     fem::assemble_vector(y.mutable_array(), *M, std::span<const
+  //     T>(constants),
   //                          fem::make_coefficients_span(coeff));
 
   //     // // Accumulate ghost values

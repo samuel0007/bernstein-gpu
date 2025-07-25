@@ -12,6 +12,7 @@
 #include <memory>
 #include <petscsystypes.h>
 
+#include "src/profiler.hpp"
 #include "src/geometry.hpp"
 #include "src/mass.hpp"
 #include "src/mass_baseline.hpp"
@@ -46,7 +47,9 @@ po::variables_map get_cli_config(int argc, char *argv[]) {
   desc.add_options()("help,h", "print usage message")
       ("nelements", po::value<int>()->default_value(1), "Number of elements (1D)")
       ("nreps", po::value<int>()->default_value(1), "number of repetitions")
-      ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator");
+      ("matrix_comparison", po::bool_switch()->default_value(true), "Compare result to CPU matrix operator")
+      ("block-size", po::value<int>()->default_value(64), "Compare result to CPU matrix operator")
+      ("cells-per-block", po::value<int>()->default_value(1), "Compare result to CPU matrix operator");
   // clang-format on
 
   po::variables_map vm;
@@ -64,12 +67,14 @@ template <std::floating_point T>
 void solver(MPI_Comm comm, po::variables_map vm) {
   constexpr int polynomial_degree = POLYNOMIAL_DEGREE;
   // BP1: p + 2 quadrature points
-  // constexpr int quadrature_points = polynomial_degree + 2;
-  constexpr int quadrature_points = polynomial_degree + 1;
+  constexpr int quadrature_points = polynomial_degree + 2;
+  // constexpr int quadrature_points = polynomial_degree + 1;
 
   const int nelements = vm["nelements"].as<int>();
   const int nreps = vm["nreps"].as<int>();
   const bool matrix_comparison = vm["matrix_comparison"].as<bool>();
+  const int block_size = vm["block-size"].as<int>();
+  const int cells_per_block = vm["cells-per-block"].as<int>();
 
   // ----------- 1. Problem Setup -----------
   // Create mesh and function space
@@ -131,10 +136,11 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   }
 
   // ----------- 2. GPU Matrix Free setup -----------
-  acc::MatFreeMass3D<T, polynomial_degree, quadrature_points> gpu_action(
-      mesh, V, alpha->x()->array());
-  acc::MatFreeMassSF3D<T, polynomial_degree, quadrature_points> gpu_action_sf(
-      mesh, V, alpha->x()->array());
+  // acc::MatFreeMass3D<T, polynomial_degree, quadrature_points> gpu_action(
+  //     mesh, V, alpha->x()->array());
+  // acc::MatFreeMassSF3D<T, polynomial_degree, quadrature_points>
+  // gpu_action_sf(
+  //     mesh, V, alpha->x()->array());
   acc::MatFreeMassBaseline3D<T, polynomial_degree, quadrature_points>
       gpu_action_baseline(mesh, V, alpha->x()->array());
 
@@ -167,7 +173,7 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i) {
       y_d.set(0);
-      gpu_action_baseline(x_d, y_d);
+      gpu_action_baseline(x_d, y_d, 1., 0, block_size, cells_per_block);
     }
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
@@ -176,18 +182,19 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     std::cout << "Baseline Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
-  {
-    auto start = std::chrono::high_resolution_clock::now();
-    for (int i = 0; i < nreps; ++i) {
-      y_d.set(0);
-      gpu_action_sf(x_d, y_d);
-    }
-    auto stop = std::chrono::high_resolution_clock::now();
-    std::chrono::duration<double> duration = stop - start;
-    std::cout << "SF Mat-free Matvec time: " << duration.count() << std::endl;
-    std::cout << "SF Mat-free action Gdofs/s: "
-              << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
-  }
+  // {
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (int i = 0; i < nreps; ++i) {
+  //     y_d.set(0);
+  //     gpu_action_sf(x_d, y_d);
+  //   }
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   std::chrono::duration<double> duration = stop - start;
+  //   std::cout << "SF Mat-free Matvec time: " << duration.count() <<
+  //   std::endl; std::cout << "SF Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) <<
+  //             std::endl;
+  // }
   // {
   //   auto start = std::chrono::high_resolution_clock::now();
   //   for (int i = 0; i < nreps; ++i) {
@@ -204,56 +211,57 @@ void solver(MPI_Comm comm, po::variables_map vm) {
 
   std::cout << "norm(y_d)=" << acc::norm(y_d) << "\n";
 
-  if (matrix_comparison && std::is_same_v<T, PetscScalar>) {
-    // Action of the bilinear form "a" on a function ui
-    auto ui = std::make_shared<fem::Function<T>>(V);
-    auto M = std::make_shared<fem::Form<T>>(
-        fem::create_form<T>(*form_mat_free_mass3D_M, {V},
-                            {{"ui", ui}, {"alpha", alpha}}, {}, {}, {}));
+  // if (matrix_comparison && std::is_same_v<T, PetscScalar>) {
+  //   // Action of the bilinear form "a" on a function ui
+  //   auto ui = std::make_shared<fem::Function<T>>(V);
+  //   auto M = std::make_shared<fem::Form<T>>(
+  //       fem::create_form<T>(*form_mat_free_mass3D_M, {V},
+  //                           {{"ui", ui}, {"alpha", alpha}}, {}, {}, {}));
 
-    la::Vector<T> y_h(map, map_bs);
-    thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
-                 y_h.mutable_array().begin());
+  //   la::Vector<T> y_h(map, map_bs);
+  //   thrust::copy(y_d.thrust_vector().begin(), y_d.thrust_vector().end(),
+  //                y_h.mutable_array().begin());
 
-    // ----------- 2. CPU Matrix Free setup -----------
-    auto coeff = fem::allocate_coefficient_storage(*M);
-    std::vector<T> constants = fem::pack_constants(*M);
+  //   // ----------- 2. CPU Matrix Free setup -----------
+  //   auto coeff = fem::allocate_coefficient_storage(*M);
+  //   std::vector<T> constants = fem::pack_constants(*M);
 
-    // Create function for computing the action of A on x (y = Ax)
-    auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
-      y.set(0.0);
+  //   // Create function for computing the action of A on x (y = Ax)
+  //   auto cpu_action = [&M, &ui, &coeff, &constants](auto &x, auto &y) {
+  //     y.set(0.0);
 
-      // Update coefficient ui (just copy data from x to ui)
-      std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
+  //     // Update coefficient ui (just copy data from x to ui)
+  //     std::ranges::copy(x.array(), ui->x()->mutable_array().begin());
 
-      // Compute action of A on x
-      fem::pack_coefficients(*M, coeff);
-      fem::assemble_vector(y.mutable_array(), *M, std::span<const T>(constants),
-                           fem::make_coefficients_span(coeff));
+  //     // Compute action of A on x
+  //     fem::pack_coefficients(*M, coeff);
+  //     fem::assemble_vector(y.mutable_array(), *M, std::span<const
+  //     T>(constants),
+  //                          fem::make_coefficients_span(coeff));
 
-      // // Accumulate ghost values
-      // y.scatter_rev(std::plus<T>());
+  //     // // Accumulate ghost values
+  //     // y.scatter_rev(std::plus<T>());
 
-      // // Update ghost values
-      // y.scatter_fwd();
-    };
+  //     // // Update ghost values
+  //     // y.scatter_fwd();
+  //   };
 
-    la::Vector<T> y(map, map_bs);
-    y.set(0.);
-    std::cout << "norm(x)=" << la::norm(x) << "\n";
-    cpu_action(x, y);
-    std::cout << "norm(y)=" << la::norm(y) << "\n";
-    double eps = 1e-6;
-    bool check = true;
-    for (int i = 0; i < ndofs_local; ++i) {
-      // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i,
-      // y.array()[i], i, y_h.array()[i]);
-      if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
-        check = false;
-      }
-    }
-    std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
-  }
+  //   la::Vector<T> y(map, map_bs);
+  //   y.set(0.);
+  //   std::cout << "norm(x)=" << la::norm(x) << "\n";
+  //   cpu_action(x, y);
+  //   std::cout << "norm(y)=" << la::norm(y) << "\n";
+  //   double eps = 1e-6;
+  //   bool check = true;
+  //   for (int i = 0; i < ndofs_local; ++i) {
+  //     // std::cout << std::format("y[{}]={:.6f}  y_h[{}]={:.6f} \n", i,
+  //     // y.array()[i], i, y_h.array()[i]);
+  //     if (std::abs(y.array()[i] - y_h.array()[i]) > eps) {
+  //       check = false;
+  //     }
+  //   }
+  //   std::cout << "S:" << (check ? "PASSED" : "FAILED") << std::endl;
+  // }
 }
 
 /// Main program
