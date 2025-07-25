@@ -8,6 +8,8 @@
 log_*.txt
 *.pdf
 *.csv
+*.out
+
 
 *.ncu-rep
 
