@@ -26,6 +26,7 @@ gmsh.initialize()
 gmsh.merge(fname)
 gmsh.model.geo.remove_all_duplicates()
 gmsh.model.geo.synchronize()
+gmsh.model.mesh.refine()
 gmsh.model.mesh.generate(3)
 gmsh.write("skull_mesh_duplicate.msh")
 

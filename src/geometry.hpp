@@ -174,7 +174,6 @@ std::vector<T> compute_geometry_facets(std::shared_ptr<dolfinx::mesh::Mesh<T>> m
     std::span<const T> x_g = mesh->geometry().x();
 
     // Tabulate basis functions at quadrature points
-    // TODO this is wrong, quadrature points should be mapped to facets
     std::array<std::size_t, 4> phi_shape = cmap.tabulate_shape(1, nq);
     std::vector<T> phi_b(std::reduce(phi_shape.begin(), phi_shape.end(), 1, std::multiplies{}));
     std::mdspan<const T, std::dextents<std::size_t, 4>> phi(phi_b.data(), phi_shape);

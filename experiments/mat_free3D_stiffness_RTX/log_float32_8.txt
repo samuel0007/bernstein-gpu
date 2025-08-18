@@ -1,6 +1,6 @@
 Num devices: 1
 Device: NVIDIA RTX 6000 Ada Generation: 8.9
-  Global memory:   48632 Mb
+  Global memory:   48510 Mb
   Shared memory:   48 kb
   Constant memory: 0 Mb
   Block registers: 65536
@@ -13,33 +13,36 @@ Device: NVIDIA RTX 6000 Ada Generation: 8.9
 Polynomial degree: 8
 Number of quadrature points (1D): 10
 Number of dofs per element: 165
-Number of cells-global: 6000
-Number of dofs-global: 531441
-Number of dofs-local: 531441
+Number of cells-global: 48000
+Number of dofs-global: 4173281
+Number of dofs-local: 4173281
 Number of repetitions: 500
 Scalar Type: float32
 -----------------------------------
-Sent dofmap to GPU (3960000 bytes)
-Sent alpha to GPU (24000 bytes)
+Sent dofmap to GPU (31680000 bytes)
+Sent alpha to GPU (192000 bytes)
 Sent dphi to GPU (1980000 bytes)
 Table size = 495000, dxnqxnd: 3x1000x165
-Sent geometry dofmap to GPU (96000 bytes)
-Sent geometry coordinates to GPU (15972 bytes)
+Sent geometry dofmap to GPU (768000 bytes)
+Sent geometry coordinates to GPU (111132 bytes)
 Sent dphi geom to GPU (48000 bytes)
 Sent weights to GPU (4000 bytes)
-Sent dofmap to GPU (3960000 bytes)
-Sent alpha to GPU (24000 bytes)
+Sent dofmap to GPU (31680000 bytes)
+Sent alpha to GPU (192000 bytes)
 phi_2 size = 80, qxn: 10x8
 phi_1_N size = 640, nxqxn: 8x10x8
 phi_0_N size = 640, nxqxn: 8x10x8
 Sent phi_2 to GPU (320 bytes)
 Sent phi_1_N to GPU (2560 bytes)
 Sent phi_0_N to GPU (2560 bytes)
-Sent geometry dofmap to GPU (96000 bytes)
-Sent geometry coordinates to GPU (15972 bytes)
+Sent geometry dofmap to GPU (768000 bytes)
+Sent geometry coordinates to GPU (111132 bytes)
 Sent dphi geom to GPU (48000 bytes)
-norm(x_d)=729
-Baseline Mat-free Matvec time: 15.4266
-Baseline Mat-free action Gdofs/s: 0.0172248
-SF Mat-free Matvec time: 0.18751
-SF Mat-free action Gdofs/s: 1.4171
+Sent dphi to GPU (1980000 bytes)
+norm(x_d)=2042.86
+Baseline Mat-free Matvec time: 127.627
+Baseline Mat-free action Gdofs/s: 0.0163496
+Tuned Mat-free Matvec time: 19.0351
+Tuned Mat-free action Gdofs/s: 0.109621
+SF Mat-free Matvec time: 1.52678
+SF Mat-free action Gdofs/s: 1.36669

@@ -1,0 +1,5 @@
+dict_items([('__header__', b'MATLAB 5.0 MAT-file Platform: posix, Created on: Sun Aug 17 14:21:41 2025'), ('__version__', '1.0'), ('__globals__', []), ('amplitude_map', array([  0.        ,   0.        ,   0.        , ..., 131.376073  ,
+        93.94023669,  60.94172373], shape=(63001,)))])
+Global relative L2 error: 13.554%
+Masked global relative L2 error (inside dome): 4.760%
+Plots saved to output-BP1

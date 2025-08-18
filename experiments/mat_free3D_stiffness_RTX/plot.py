@@ -8,9 +8,9 @@ def parse_log_file(filename):
     baseline = np.nan
     with open(filename, 'r') as f:
         for line in f:
-            # m1 = re.search(r'SF OTF Mat-free action Gdofs/s:\s*([0-9.]+)', line)
-            # if m1:
-            #     sf_otf = float(m1.group(1))
+            m1 = re.search(r'SF OTF Mat-free action Gdofs/s:\s*([0-9.]+)', line)
+            if m1:
+                sf_otf = float(m1.group(1))
             m2 = re.search(r'Baseline Mat-free action Gdofs/s:\s*([0-9.]+)', line)
             if m2:
                 baseline = float(m2.group(1))

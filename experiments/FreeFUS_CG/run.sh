@@ -1,8 +1,8 @@
-EXPERIMENT=mat_free3D_stiffness_RTX
+EXPERIMENT=FreeFUS_CG
+s=float32
+max_steps=100
+sample_harmonic=0
 
-nelements=20
-
-# per‑p optimal configs STIFF
 bs_for_p() {
     case "$1" in
         2)  echo 16 ;;
@@ -26,15 +26,16 @@ cpb_for_p() {
     esac
 }
 
-for s in float32 float64; do
-    for p in 2 3 4 5 6 7 8; do
-    # for p in 10 11 12 13 14; do
-        cd build
+for p in 2 3 4 5 6 7 8 9; do
+# for p in 10 11 12 13 14; do
+        cd build/apps/FreeFUS
         cmake .. -Dscalar_type=$s -Dpolynomial_degree=$p -Dnvidia=On -Damd=off
-        make mat_free_stiffness3D
-        cd ..
+        make FreeFUS
+        cd ../../..
     bs=$(bs_for_p "$p")
     cpb=$(cpb_for_p "$p")
-	mpirun -n 1 build/mat_free_stiffness3D --nreps 500 --nelements $nelements --block-size $bs --cells-per-block $cpb 2>&1 | tee experiments/$EXPERIMENT/log_aligned_${s}_$p.txt
+
+    for CFL in 0.5 1.0 2.0 3.0 4.0 5.0 6.0 7.0 8.0 9.0 10.0 100.0; do
+        mpirun -n 1 build/apps/FreeFUS --CFL $CFL --sample-harmonic $sample_harmonic --max-steps $max_steps  2>&1 | tee experiments/$EXPERIMENT/log_$p.txt
     done
 done

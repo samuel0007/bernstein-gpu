@@ -8,10 +8,13 @@ import matplotlib.pyplot as plt
 import numpy as np
 from paraview.simple import ADIOS2VTXReader, ResampleToImage, servermanager
 from vtk.util.numpy_support import vtk_to_numpy
+from scipy.io import savemat
+from scipy.signal import get_window
+
 
 # --- Default Configuration ---
 DEFAULT_FIELD_NAME = "u"
-DEFAULT_SAMPLING_DIMS = [500, 1, 1000]
+DEFAULT_SAMPLING_DIMS = [251, 1, 251]
 DEFAULT_TARGET_FREQ_HZ = 0.5e6
 DEFAULT_OUTPUT_DIR = Path("./output")
 
@@ -41,6 +44,20 @@ def parse_arguments():
     parser.add_argument("--output_dir", type=Path, default=DEFAULT_OUTPUT_DIR, help="Directory to save output images.")
     parser.add_argument("--jobs", type=int, default=-1,
                         help="Number of parallel jobs for data loading and plotting. -1 uses all available cores.")
+    
+    parser.add_argument(
+        "--window",
+        type=str,
+        default="hann",
+        choices=["rect", "hann", "hamming", "blackman", "blackmanharris", "flattop", "tukey"],
+        help="Time-domain window for FFT amplitude extraction."
+    )
+    parser.add_argument(
+        "--tukey-alpha",
+        type=float,
+        default=0.5,
+        help="Alpha parameter for Tukey window (ignored unless --window=tukey)."
+    )
     args = parser.parse_args()
 
     if 1 not in args.dims:
@@ -99,27 +116,46 @@ def load_data_in_parallel(input_file, times, field_name, sampling_dims, n_jobs):
     return data_stack
 
 
-def perform_fft_analysis(data_stack, times, target_freq):
-    """Performs FFT on the time-series data to find the amplitude at a target frequency."""
-    # ... (function is unchanged) ...
+def perform_fft_analysis(data_stack, times, target_freq, window_name="hann", tukey_alpha=0.5):
+    """FFT amplitude at target_freq with optional windowing.
+       Amplitude normalization uses coherent gain sum(window)."""
     print("Performing FFT analysis...")
     nt, npts = data_stack.shape
-    
+
     if len(times) > 1:
-        dt = np.mean(np.diff(times))
+        dt = float(np.mean(np.diff(times)))
     else:
         dt = 1.0
         print("Warning: Only one timestep. FFT results may not be meaningful.")
 
-    fft_result = np.fft.rfft(data_stack, axis=0)
-    freqs = np.fft.rfftfreq(nt, dt)
-    
-    idx = np.argmin(np.abs(freqs - target_freq))
-    closest_freq = freqs[idx]
-    print(f"Target frequency f0={target_freq/1e6:.2f} MHz, closest FFT frequency={closest_freq/1e6:.2f} MHz")
+    # Build window
+    name_map = {
+        "rect": "boxcar",
+        "hann": "hann",
+        "hamming": "hamming",
+        "blackman": "blackman",
+        "blackmanharris": "blackmanharris",
+        "flattop": "flattop",
+        "tukey": ("tukey", tukey_alpha),
+    }
+    gw = name_map[window_name]
+    w = get_window(gw, nt, fftbins=True).astype(data_stack.dtype, copy=False)
+    wsum = float(w.sum())
 
-    amplitude = 2 * np.abs(fft_result[idx, :]) / nt
+    # Apply window and FFT
+    X = np.fft.rfft(w[:, None] * data_stack, axis=0)
+    freqs = np.fft.rfftfreq(nt, dt)
+
+    idx = int(np.argmin(np.abs(freqs - target_freq)))
+    closest_freq = float(freqs[idx])
+    print(f"Window: {window_name}  (sum={wsum:.6g})")
+    print(f"Target f0={target_freq/1e6:.2f} MHz, closest FFT bin={closest_freq/1e6:.2f} MHz")
+
+    # Amplitude with coherent-gain correction: for a unit sinusoid at-bin,
+    # |X[k0]| = (A/2)*sum(w)  =>  A = 2*|X[k0]|/sum(w)
+    amplitude = 2.0 * np.abs(X[idx, :]) / wsum
     return amplitude, closest_freq
+
 
 # --- NEW: Worker function for parallel plotting ---
 def generate_single_timestep_plot(i, t, timestep_data, vmin, vmax, field_name, plane_info, output_dir):
@@ -243,9 +279,15 @@ def main():
     data_stack = load_data_in_parallel(
         args.input_file, times_to_process, args.field, args.dims, args.jobs
     )
+    
+    amplitude_map, actual_freq = perform_fft_analysis(
+        data_stack, times_to_process, args.freq, args.window, args.tukey_alpha
+    )
+    
+    # Save
+    savemat(args.output_dir / 'amplitude.mat', {'amplitude_map': amplitude_map})
+    print(f"Amplitude map saved to '{args.output_dir / 'amplitude.mat'}'")
 
-    # 3. Perform FFT Analysis
-    amplitude_map, actual_freq = perform_fft_analysis(data_stack, times_to_process, args.freq)
 
     # 4. Generate Plots (Timestep plots are now parallel)
     plot_timesteps_in_parallel(

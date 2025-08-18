@@ -1,6 +1,6 @@
 Num devices: 1
 Device: NVIDIA RTX 6000 Ada Generation: 8.9
-  Global memory:   48632 Mb
+  Global memory:   48510 Mb
   Shared memory:   48 kb
   Constant memory: 0 Mb
   Block registers: 65536
@@ -13,33 +13,24 @@ Device: NVIDIA RTX 6000 Ada Generation: 8.9
 Polynomial degree: 3
 Number of quadrature points (1D): 5
 Number of dofs per element: 20
-Number of cells-global: 6000
-Number of dofs-global: 29791
-Number of dofs-local: 29791
+Number of cells-global: 48000
+Number of dofs-global: 226981
+Number of dofs-local: 226981
 Number of repetitions: 500
 Scalar Type: float64
 -----------------------------------
-Sent dofmap to GPU (480000 bytes)
-Sent alpha to GPU (48000 bytes)
-Sent dphi to GPU (21600 bytes)
-Table size = 2700, dxnqxnd: 3x45x20
-Sent geometry dofmap to GPU (96000 bytes)
-Sent geometry coordinates to GPU (31944 bytes)
-Sent dphi geom to GPU (4320 bytes)
-Sent weights to GPU (360 bytes)
-Sent dofmap to GPU (480000 bytes)
-Sent alpha to GPU (48000 bytes)
+Sent dofmap to GPU (3840000 bytes)
+Sent alpha to GPU (384000 bytes)
 phi_2 size = 15, qxn: 5x3
 phi_1_N size = 45, nxqxn: 3x5x3
 phi_0_N size = 45, nxqxn: 3x5x3
 Sent phi_2 to GPU (120 bytes)
 Sent phi_1_N to GPU (360 bytes)
 Sent phi_0_N to GPU (360 bytes)
-Sent geometry dofmap to GPU (96000 bytes)
-Sent geometry coordinates to GPU (31944 bytes)
+Sent geometry dofmap to GPU (768000 bytes)
+Sent geometry coordinates to GPU (222264 bytes)
 Sent dphi geom to GPU (12000 bytes)
-norm(x_d)=172.601
-Baseline Mat-free Matvec time: 0.0482398
-Baseline Mat-free action Gdofs/s: 0.30878
-SF Mat-free Matvec time: 0.0566426
-SF Mat-free action Gdofs/s: 0.262974
+Sent dphi to GPU (21600 bytes)
+norm(x_d)=476.425
+SF Mat-free Matvec time: 0.37745
+SF Mat-free action Gdofs/s: 0.300677

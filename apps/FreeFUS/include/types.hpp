@@ -1,14 +1,16 @@
 #pragma once
 #include "mass_baseline.hpp"
 #include "stiffness_baseline.hpp"
+#include "newmark.hpp"
+
 #include "stiffness_sf.hpp"
 #include <basix/finite-element.h>
 
+template <auto>
+inline constexpr bool always_false_v = false;
 
-template<auto> inline constexpr bool always_false_v = false;
-
-
-enum class MaterialCase : int {
+enum class MaterialCase : int
+{
   BP1 = 1,
   BP2 = 2,
   BP3 = 3,
@@ -18,22 +20,28 @@ enum class MaterialCase : int {
   // BP7 = 7,
   H101 = 8,
   Skull = 9,
+  NonlinearTest = 10,
 };
 
-enum class ModelType : int {
+enum class ModelType : int
+{
   LinearExplicit = 1,
   LinearImplicit = 2,
   LinearLossyImplicit = 3,
   NonLinearLossyImplicit = 4,
+  FusedLinearLossyImplicit = 5
 };
 
-enum class TimesteppingType : int {
+enum class TimesteppingType : int
+{
   ExplicitRK4 = 1,
   Newmark = 2,
   NonlinearNewmark = 3,
 };
 
-template <typename T> struct UserConfig {
+template <typename T>
+struct UserConfig
+{
   std::string mesh_name;
   std::string mesh_filepath;
   std::string mesh_dir;
@@ -58,6 +66,8 @@ template <typename T> struct UserConfig {
   int sample_nx;
   int sample_nz;
 
+  int buffer_periods;
+
   int output_steps;
   bool insitu;
   bool insitu_with_yaml;
@@ -65,12 +75,15 @@ template <typename T> struct UserConfig {
 
   double cg_tol;
   int cg_max_steps;
+  uint64_t max_steps;
   double nonlinear_tol;
 
   spdlog::level::level_enum log_level;
 };
 
-template <typename T> struct PhysicalParameters {
+template <typename T>
+struct PhysicalParameters
+{
   const T &source_frequency;
   const T &source_amplitude;
   const T &domain_length;
@@ -89,7 +102,8 @@ template <typename T> struct PhysicalParameters {
 };
 
 template <typename U>
-struct MeshData {
+struct MeshData
+{
   std::shared_ptr<mesh::Mesh<U>> mesh;
   std::shared_ptr<mesh::MeshTags<std::int32_t>> cell_tags;
   std::shared_ptr<mesh::MeshTags<std::int32_t>> facet_tags;
@@ -103,12 +117,18 @@ template <typename T, typename U, int P, int Q, int D>
 using StiffnessAction =
     std::conditional_t<D == 2, acc::MatFreeStiffness<T, P, Q, U>,
                        acc::MatFreeStiffness3D<T, P, Q, U>>;
-                      //  acc::MatFreeStiffnessSF3D<T, P, Q, U>>;
+//  acc::MatFreeStiffnessSF3D<T, P, Q, U>>;
 
 template <typename T, typename U, int P, int Q, int D>
 using ExteriorMassAction =
     std::conditional_t<D == 2, acc::MatFreeMassExteriorBaseline<T, P, Q, U>,
                        acc::MatFreeMassExteriorBaseline3D<T, P, Q, U>>;
+
+// TODO in 2d
+template <typename T, typename U, int P, int Q, int D>
+using NewmarkAction =
+    std::conditional_t<D == 2, acc::MatFreeNewmark3D<T, P, Q, U>,
+                       acc::MatFreeNewmark3D<T, P, Q, U>>;
 
 // TODO in 2d
 template <typename T, typename U, int P, int Q, int D>

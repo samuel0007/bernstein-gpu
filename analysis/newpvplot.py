@@ -16,7 +16,6 @@ field        = "u"
 axis         = "X"              # "X", "Y", or "Z"
 value        = 0.0              # Slice location
 dims         = [1, n, n]    # Sampling dimensions [nx, ny, nz] for the slice
-f0           = 0.1e6            # Center frequency for FFT analysis (Hz)
 # ---
 
 print("number of points:", n)
@@ -59,9 +58,16 @@ if __name__ == "__main__":
         help="Path to the input .bp file"
     )
     parser.add_argument(
+        "f", 
+        default=0.1e6,
+        type=float, 
+        nargs="?",
+        help="target frequency"
+    )
+    parser.add_argument(
         "N", 
         type=int, 
-        default=5,
+        default=100,
         nargs="?",
         help="Number of timesteps to analyze",
     )
@@ -72,6 +78,8 @@ if __name__ == "__main__":
         help="Number of parallel jobs to use for data loading (-1 means use all available cores)",
     )
     args = parser.parse_args()
+
+    f0 = args.f
 
     # --- Setup Output Directory ---
     os.makedirs('output', exist_ok=True)
@@ -148,13 +156,115 @@ if __name__ == "__main__":
     print(f"Global data range determined: vmin={vmin:.4f}, vmax={vmax:.4f}")
 
     # --- Main Plotting Loop ---
-    print("Generating timestep images with fixed color scale...")
-    for i, t in enumerate(times):
-        plt.imshow(u_stack[i].reshape(n, n), cmap='seismic', aspect='auto', vmin=vmin, vmax=vmax)
-        plt.colorbar(label=f'Field "{field}"')
-        plt.title(f'Timestep {i+1} (t={t:.6f})')
-        plt.savefig(f'output/field_timestep_{i+1}.png')
-        plt.close()
+    # print("Generating timestep images with fixed color scale...")
+    # for i, t in enumerate(times):
+    #     u = u_stack[i].reshape(n, n)
+    #     plt.imshow(u, cmap='seismic', aspect='auto', vmin=vmin, vmax=vmax)
+    #     plt.colorbar(label=f'Field "{field}"')
+    #     plt.title(f'Timestep {i+1} (t={t:.6f})')
+    #     plt.savefig(f'output/field_timestep_{i+1}.png')
+    #     plt.close()
+        
+    #     # line plot in the middle of y axis
+    #     plt.plot(np.linspace(0, n-1, n), u[n//2, :], color='b')
+    #     plt.xlabel('x (m)')
+    #     plt.ylabel(f'Field "{field}"')
+    #     plt.title(f'Line Plot at Timestep {i+1} (t={t:.6f})')
+    #     plt.savefig(f'output/line_plot_timestep_{i+1}.png')
+    #     plt.close()
+    
+    import numpy as np
+    import matplotlib.pyplot as plt
+    from scipy.special import jn
+
+    # --- 1. Physical parameters ---
+    c = 1480.0       # [m/s]
+    rho = 1000.0     # [kg/m^3]
+    beta = 3.5       # nonlinearity coeff
+    f = 0.1e6        # Hz
+    P0 = 80e6         # Pa (5 MPa)
+
+    alpha_fund = 0.2  # [Np/m] absorption at fundamental
+
+    omega = 2*np.pi*f
+    k = omega/c
+
+    # shock formation distance
+    x_s = rho * c**3 / (beta * omega * P0)
+    shock_dist = x_s   # same definition
+
+    # validation point: 1 cm
+    x_validate = 0.01875
+
+    # dimensionless z
+    z_validate = x_validate / shock_dist
+
+    # Goldberg number
+    Gamma = 1 / (alpha_fund * shock_dist)
+
+    print("--- Validation Benchmark Setup ---")
+    print(f"P0 = {P0/1e6:.2f} MPa")
+    print(f"Shock distance = {shock_dist*100:.2f} cm")
+    print(f"x_validate = {x_validate*100:.2f} cm")
+    print(f"z = {z_validate:.2f}")
+    print(f"Gamma = {Gamma:.2f}")
+    print("----------------------------------")
+
+    # --- 2. Waveform at x_validate ---
+    T = 1.0/f
+    t_arrival = x_validate / c
+    t = t_arrival + np.linspace(0.0, T, 5000, endpoint=False)
+    Nmax = 300
+
+    alpha1 = alpha_fund  # attenuation coeff for n=1
+
+    p_analytical = np.zeros_like(t)
+    harmonics_analytical_p = np.zeros(Nmax)
+
+    for n in range(1, Nmax+1):
+        coeff = (2*P0/(n*z_validate)) * jn(n, n*z_validate) * np.exp(-(n**2)*alpha1*x_validate)
+        harmonics_analytical_p[n-1] = abs(coeff)
+        # enforce sine series for 0→0 boundary
+        p_analytical += coeff * np.sin(n*omega*(t - t_arrival))
+    
+    n = 1000
+    # retarded time plot for middle x
+    # 1cm
+    # mid_x = n // 2
+    # 1.75cm
+    # mid_x = n // 8
+    # 1.875cm
+    mid_x = n // 16
+    mid_y = n // 2
+
+    retarded_signal = [u_stack[i].reshape(n, n)[mid_y, mid_x] for i in range(len(times))]
+    retarded_signal = np.array(retarded_signal)  # shape (ntimes, n)
+
+    signal_at_mid = retarded_signal
+    # plot over time
+    plt.plot((t - t_arrival)*1e6 + 92.7, p_analytical / 1e6, 'k-', lw=2, label="Mendousse")
+
+    # find zeros in signal_at_mid
+    zero_crossings = np.where(np.diff(np.sign(signal_at_mid)))[0]
+    print("Zero crossings at indices:", zero_crossings)
+    print(np.asarray(times)[zero_crossings])
+
+    plt.scatter(np.asarray(times)*1e6, signal_at_mid / 1e6, color="b", marker="x", s=5, label="FreeFUS", zorder=3)
+    plt.xlabel("time [µs]")
+    # 1.875cm
+    plt.xlim(0.0000927 * 1e6, 0.0001027 * 1e6)
+    # 1.75cm
+    # plt.xlim(0.0000918 * 1e6, 0.0001018 * 1e6)
+    # 1cm
+    # plt.xlim(0.0000967 * 1e6, 0.000101 * 1e6)
+    
+    plt.ylabel(f'p [MPa]')
+    plt.title("p(t) @ 1.875cm")
+    plt.legend()
+    plt.savefig("output/retarded_time_center.png")
+    plt.close()
+
+    
 
     # --- FFT Analysis ---
     nt, npts = u_stack.shape

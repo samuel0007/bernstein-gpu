@@ -261,8 +261,8 @@ void insitu_output_DG(auto material_coefficients,
   scenes["s2/renders/r1/camera/azimuth"] = 20.0;
   scenes["s2/renders/r1/camera/elevation"] = 10.0;
   scenes["s2/renders/r1/camera/up"].set_float64_ptr(vec3,3);
-  scenes["s2/renders/r1/world_annotations"] = "false";
-  scenes["s2/renders/r1/screen_annotations"] = "false";
+  // scenes["s2/renders/r1/world_annotations"] = "false";
+  // scenes["s2/renders/r1/screen_annotations"] = "false";
 
   scenes["s2/plots/p1/type"] = "pseudocolor";
   scenes["s2/plots/p1/field"] = "rho0";

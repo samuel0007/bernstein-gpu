@@ -149,8 +149,8 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   // ----------- 2. GPU Matrix Free setup -----------
   acc::MatFreeStiffness3D<T, polynomial_degree, quadrature_points>
       gpu_action_baseline(mesh, V, alpha->x()->array());
-  // acc::MatFreeStiffnessSF3D<T, polynomial_degree, quadrature_points>
-  //     gpu_action_sf(mesh, V, alpha->x()->array());
+  acc::MatFreeStiffnessSF3D<T, polynomial_degree, quadrature_points>
+      gpu_action_sf(mesh, V, alpha->x()->array());
 
   // ----------- 3. Matrix Free apply -----------
 
@@ -170,6 +170,20 @@ void solver(MPI_Comm comm, po::variables_map vm) {
   x_d.copy_from_host(x);
   std::cout << "norm(x_d)=" << acc::norm(x_d) << "\n";
 
+  // {
+  //   auto start = std::chrono::high_resolution_clock::now();
+  //   for (int i = 0; i < nreps; ++i) {
+  //     y_d.set(0);
+  //     gpu_action_baseline(x_d, y_d, 1., 0);
+  //   }
+  //   device_synchronize();
+  //   auto stop = std::chrono::high_resolution_clock::now();
+  //   std::chrono::duration<double> duration = stop - start;
+  //   std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+  //             << std::endl;
+  //   std::cout << "Baseline Mat-free action Gdofs/s: "
+  //             << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
+  // }
   {
     auto start = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < nreps; ++i) {
@@ -179,9 +193,9 @@ void solver(MPI_Comm comm, po::variables_map vm) {
     device_synchronize();
     auto stop = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double> duration = stop - start;
-    std::cout << "Baseline Mat-free Matvec time: " << duration.count()
+    std::cout << "Tuned+Aligned Mat-free Matvec time: " << duration.count()
               << std::endl;
-    std::cout << "Baseline Mat-free action Gdofs/s: "
+    std::cout << "Tuned+Aligned Mat-free action Gdofs/s: "
               << ndofs_global * nreps / (1e9 * duration.count()) << std::endl;
   }
   // {

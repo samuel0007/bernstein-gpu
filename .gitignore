@@ -9,7 +9,8 @@ log_*.txt
 *.pdf
 *.csv
 *.out
-
+*.mat
+skull.gif
 
 *.ncu-rep
 

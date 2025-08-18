@@ -55,8 +55,8 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
       fs::path(DATA_DIR) / cfg.mesh_name / vm["output-path"].as<std::string>();
   {
     auto ext = fs::path(cfg.output_filepath).extension();
-    if (ext != ".bp")
-      throw std::invalid_argument("output_path must end with .bp");
+    if (ext == ".bp")
+      throw std::invalid_argument("output_path should not end with .bp");
   }
 
   cfg.CFL = vm["CFL"].as<U>();
@@ -69,6 +69,7 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   cfg.material_case = static_cast<MaterialCase>(vm["material-case"].as<int>());
   cfg.sample_harmonic = vm["sample-harmonic"].as<int>();
   cfg.sampling_periods = vm["sampling-periods"].as<int>();
+  cfg.buffer_periods = vm["buffer-periods"].as<int>();
 
   cfg.insitu = vm["insitu"].as<bool>();
   cfg.insitu_output_steps = vm["insitu-output-steps"].as<int>();
@@ -85,6 +86,9 @@ UserConfig<U> make_user_config(const po::variables_map &vm) {
   }
   cfg.cg_tol = vm["cg-tol"].as<double>();
   cfg.cg_max_steps = vm["cg-max-steps"].as<int>();
+
+  cfg.max_steps = vm["max-steps"].as<uint64_t>();
+
   cfg.nonlinear_tol = vm["nonlinear-tol"].as<double>();
   cfg.window_length = vm["window-length"].as<double>();
 
@@ -101,7 +105,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
   // clang-format off
   desc.add_options()("help,h", "print usage message")
       ("mesh,m", po::value<std::string>()->default_value("BP1-small"), "mesh folder name")
-      ("output-path,o", po::value<std::string>()->default_value("output.bp"), "output path, must end in .bp")
+      ("output-path,o", po::value<std::string>()->default_value("output"), "output path")
       ("polynomial-basis", po::value<std::string>()->default_value("gll_warped"), "Polynomial basis: bernstein, gll_warped")
       ("material-case", po::value<int>()->default_value(1), "Material case [1-7]")
       ("model-type", po::value<int>()->default_value(1), "Model type [1-2]")
@@ -111,7 +115,7 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("source-frequency", po::value<T>()->default_value(0.1e6), "Source frequency (Hz)")
       ("source-amplitude", po::value<T>()->default_value(60000), "Source amplitude (Pa)")
       ("domain-length", po::value<T>()->default_value(0.12), "Domain length (m)")
-      ("domain-width", po::value<T>()->default_value(0.07), "Domain width (m)")
+      ("domain-width", po::value<T>()->default_value(0.064), "Domain width (m)")
       ("window-length", po::value<T>()->default_value(4), "Window length (periods)")
       ("output-steps", po::value<int>()->default_value(200), "Frequency of I/O output steps")
       ("insitu", po::value<bool>()->default_value(true), "Insitu visualisation")
@@ -119,10 +123,12 @@ po::variables_map parse_cli_config(int argc, char *argv[]) {
       ("insitu-with-yaml", po::value<bool>()->default_value(true), "Search for an ascent_actions.yaml file in mesh dir.")
       ("cg-tol", po::value<T>()->default_value(1e-10), "Tolerance of CG solver")
       ("cg-max-steps", po::value<int>()->default_value(200), "Max number of CG iterations")
+      ("max-steps", po::value<uint64_t>()->default_value(-1), "Max number of timesteps")
       ("nonlinear-tol", po::value<T>()->default_value(1e-6), "Tolerance of nonlinear solver")
-      ("sample-nx", po::value<int>()->default_value(500), "Sampling in X direction")
-      ("sample-nz", po::value<int>()->default_value(500), "Sampling in Z direction")
-      ("sampling-periods", po::value<int>()->default_value(4), "Sampling time (periods)")
+      ("sample-nx", po::value<int>()->default_value(250), "Sampling in X direction")
+      ("sample-nz", po::value<int>()->default_value(250), "Sampling in Z direction")
+      ("sampling-periods", po::value<int>()->default_value(2), "Sampling time (periods)")
+      ("buffer-periods", po::value<int>()->default_value(4), "Buffer time (after worst case traversal) (periods)")
       ("refinement-level", po::value<int>()->default_value(1), "Uniformly refine input mesh (level). By default, the mesh is not refined")
       ("log-level", po::value<std::string>()->default_value("info"),
        "Log level: trace, debug, info, warn, err, critical, off");

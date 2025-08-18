@@ -5,7 +5,7 @@ option(cpu "Build for CPUs"	off)
 option(nvidia "Build for NVidia GPUs" on)
 option(amd "Build for AMD GPUs"	off)
 
-set(polynomial_degree 2 CACHE STRING "Polynomial degree")
+set(polynomial_degree 4 CACHE STRING "Polynomial degree")
 set(scalar_type "float32" CACHE STRING "Scalar type")
 message(STATUS "Polynomial degree: ${polynomial_degree}")
 message(STATUS "Scalar type: ${scalar_type}")
@@ -173,6 +173,7 @@ add_example(mat_free_newmark ON)
 # Solvers
 add_example(mass_cg ON)
 add_example(mass3D_cg ON)
+add_example(stiff_cg ON)
 add_example(newmark_cg ON)
 
 # Acoustics Examples

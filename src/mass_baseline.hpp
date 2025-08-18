@@ -223,8 +223,8 @@ public:
     this->phi_d_span =
         copy_to_device(phi_table.begin(), phi_table.end(), this->phi_d, "phi");
 
-    this->phiT_d_span =
-        copy_to_device(phi_table.begin(), phi_table.end(), this->phiT_d, "phiT");
+    this->phiT_d_span = copy_to_device(phi_table.begin(), phi_table.end(),
+                                       this->phiT_d, "phiT");
 
     std::cout << "Precomputing geometry..." << std::endl;
     std::vector<U> detJ_geom = compute_geometry(mesh, qpts, qwts);
@@ -237,6 +237,16 @@ public:
   void operator()(Vector &in, Vector &out, U global_coefficient = 1.,
                   GpuStream stream = 0, int bs = nq, int cells_per_block = 1) {
     in.scatter_fwd();
+
+    std::map<int, int> optimal_mass_block_size_x = {
+        {2, 16}, {3, 24}, {4, 16}, {5, 16}, {6, 128}, {7, 16}, {8, 16}};
+    // std::map<int, int> optimal_mass_block_size_y = {
+    //     {2, 8}, {3, 4}, {4, 2}, {5, 2}, {6, 1}, {7, 2}, {8, 2}};
+     std::map<int, int> optimal_mass_block_size_y = {
+        {2, 8}, {3, 4}, {4, 1}, {5, 2}, {6, 1}, {7, 2}, {8, 2}};
+    bs = optimal_mass_block_size_x[P];
+    cells_per_block = optimal_mass_block_size_y[P];
+
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -262,12 +272,24 @@ public:
     //           /
     //                  cells_per_block / 1024.
     //           << std::endl;
-    mass_operator_baseline_optiT<T, nd, nq>
+    // mass_operator_baseline<T, nd, nq>
+    //     <<<grid_size, block_size, 0, stream>>>(
+    //         in_dofs, out_dofs, this->alpha_d_span.data(),
+    //         this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
+    //         this->phi_d_span.data(),
+    //         global_coefficient);
+    mass_operator_baseline_opti<T, nd, nq>
         <<<grid_size, block_size, shmem, stream>>>(
             in_dofs, out_dofs, this->alpha_d_span.data(),
             this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
-            this->phi_d_span.data(), this->phiT_d_span.data(),
-            global_coefficient, this->number_of_local_cells);
+            this->phi_d_span.data(), global_coefficient,
+            this->number_of_local_cells);
+    // mass_operator_baseline_optiT<T, nd, nq>
+    //     <<<grid_size, block_size, shmem, stream>>>(
+    //         in_dofs, out_dofs, this->alpha_d_span.data(),
+    //         this->detJ_geom_d_span.data(), this->dofmap_d_span.data(),
+    //         this->phi_d_span.data(), this->phiT_d_span.data(),
+    //         global_coefficient, this->number_of_local_cells);
     check_device_last_error();
   }
 

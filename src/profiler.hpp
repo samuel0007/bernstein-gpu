@@ -1,13 +1,13 @@
 #pragma once
 
 // ----------------------- activation -----------------------
-// #ifndef PROF_ENABLED
-//   #ifdef PROF_ACTIVATE
+#ifndef PROF_ENABLED
+  #ifdef PROF_ACTIVATE
     #define PROF_ENABLED 1
-//   #else
-    // #define PROF_ENABLED 0
-//   #endif
-// #endif
+  #else
+    #define PROF_ENABLED 0
+  #endif
+#endif
 // ----------------------------------------------------------
 
 #if PROF_ENABLED  // ================= REAL IMPLEMENTATION =====================
@@ -19,27 +19,7 @@
 #include <limits>
 #include <spdlog/spdlog.h>
 
-#if USE_CUDA
-  #include <cuda_runtime.h>
-  using GpuEvent  = cudaEvent_t;
-  using GpuStream = cudaStream_t;
-  #define GPU_EVENT_CREATE(e)        cudaEventCreate(&(e))
-  #define GPU_EVENT_RECORD(e,s)      cudaEventRecord((e),(s))
-  #define GPU_EVENT_SYNC(e)          cudaEventSynchronize((e))
-  #define GPU_EVENT_ELAPSE(ms,a,b)   cudaEventElapsedTime(&(ms),(a),(b))
-  #define GPU_EVENT_DESTROY(e)       cudaEventDestroy((e))
-#elif USE_HIP
-  #include <hip/hip_runtime.h>
-  using GpuEvent  = hipEvent_t;
-  using GpuStream = hipStream_t;
-  #define GPU_EVENT_CREATE(e)        hipEventCreate(&(e))
-  #define GPU_EVENT_RECORD(e,s)      hipEventRecord((e),(s))
-  #define GPU_EVENT_SYNC(e)          hipEventSynchronize((e))
-  #define GPU_EVENT_ELAPSE(ms,a,b)   hipEventElapsedTime(&(ms),(a),(b))
-  #define GPU_EVENT_DESTROY(e)       hipEventDestroy(e)
-#else
-  #error "Compile with nvcc or hipcc when PROF_ENABLED=1."
-#endif
+#include "util.hpp"
 
 class Prof {
 public:

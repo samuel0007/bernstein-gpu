@@ -20,6 +20,25 @@ auto copy_to_device(InputIt first,
 }
 
 
+#ifdef USE_CUDA
+  using GpuEvent  = cudaEvent_t;
+  using GpuStream = cudaStream_t;
+  #define GPU_EVENT_CREATE(e)        cudaEventCreate(&(e))
+  #define GPU_EVENT_RECORD(e,s)      cudaEventRecord((e),(s))
+  #define GPU_EVENT_SYNC(e)          cudaEventSynchronize((e))
+  #define GPU_EVENT_ELAPSE(ms,a,b)   cudaEventElapsedTime(&(ms),(a),(b))
+  #define GPU_EVENT_DESTROY(e)       cudaEventDestroy((e))
+#elif USE_HIP
+  using GpuEvent  = hipEvent_t;
+  using GpuStream = hipStream_t;
+  #define GPU_EVENT_CREATE(e)        hipEventCreate(&(e))
+  #define GPU_EVENT_RECORD(e,s)      hipEventRecord((e),(s))
+  #define GPU_EVENT_SYNC(e)          hipEventSynchronize((e))
+  #define GPU_EVENT_ELAPSE(ms,a,b)   hipEventElapsedTime(&(ms),(a),(b))
+  #define GPU_EVENT_DESTROY(e)       hipEventDestroy(e)
+#endif
+
+
 // Some useful utilities for error checking and synchronisation
 // for each hardware type
 

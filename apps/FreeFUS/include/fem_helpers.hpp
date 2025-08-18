@@ -193,4 +193,5 @@ auto interpolate_to_slice(const std::shared_ptr<fem::Function<T>> &u,
   u_sliced_out->interpolate(*u, cells, interpolation_point_ownership);
 }
 
+
 } // namespace freefus

@@ -740,6 +740,89 @@ __global__ void stiffness_operator3D_opti(T *__restrict__ out_dofs,
   }
 }
 
+
+template <typename T, int nd, int nq>
+__global__ void stiffness_operator3D_opti_aligned(T *__restrict__ out_dofs,
+                                     const T *__restrict__ in_dofs,
+                                     const T *__restrict__ alpha_cells,
+                                     const T *__restrict__ G_cells,
+                                     const std::int32_t *__restrict__ dofmap,
+                                     const T *__restrict__ dphix_,
+                                     const T *__restrict__ dphiy_,
+                                     const T *__restrict__ dphiz_,
+                                     T global_coefficient, int ncells) {
+  const int tx = threadIdx.x;
+  const int stride = blockDim.x;
+  const int c_local = threadIdx.y;
+  const int cells_blk = blockDim.y;
+  const int cell_idx = blockIdx.x * cells_blk + c_local;
+  const bool active = (cell_idx < ncells);
+
+  // --- shared memory layout (dynamic) ---
+  // per cell: nd (dofs) + 3*nq (scratch1/2/3)
+  extern __shared__ T sh[];
+  const int per_cell = nd + 3 * nq;
+  T *in_local_dofs = sh + c_local * per_cell; // [0 .. nd)
+  T *scratch1 = in_local_dofs + nd;           // [0 .. nq)
+  T *scratch2 = scratch1 + nq;                // [0 .. nq)
+  T *scratch3 = scratch2 + nq;                // [0 .. nq)
+
+  // ---- load DOFs (stride over nd) ----
+  if (active) {
+    for (int i = tx; i < nd; i += stride) {
+      const int gdof = dofmap[cell_idx * nd + i];
+      in_local_dofs[i] = in_dofs[gdof];
+    }
+  }
+  __syncthreads();
+
+  auto dphix = [&](int j, int k) { return dphix_[j * nd + k]; };
+  auto dphiy = [&](int j, int k) { return dphiy_[j * nd + k]; };
+  auto dphiz = [&](int j, int k) { return dphiz_[j * nd + k]; };
+
+  // ---- phase 1: compute at quadrature points (stride over nq) ----
+  if (active) {
+    const T alpha = alpha_cells[cell_idx];
+    for (int iq = tx; iq < nq; iq += stride) {
+      T val_x = 0.0, val_y = 0.0, val_z = 0.0;
+      for (int idof = 0; idof < nd; ++idof) {
+        const T u = in_local_dofs[idof];
+        val_x += dphix(iq, idof) * u;
+        val_y += dphiy(iq, idof) * u;
+        val_z += dphiz(iq, idof) * u;
+      }
+
+      const int gid = iq + cell_idx * nq * 6;
+      const T G0 = G_cells[gid + nq * 0];
+      const T G1 = G_cells[gid + nq * 1];
+      const T G2 = G_cells[gid + nq * 2];
+      const T G3 = G_cells[gid + nq * 3];
+      const T G4 = G_cells[gid + nq * 4];
+      const T G5 = G_cells[gid + nq * 5];
+
+      scratch1[iq] = alpha * (G0 * val_x + G1 * val_y + G2 * val_z);
+      scratch2[iq] = alpha * (G1 * val_x + G3 * val_y + G4 * val_z);
+      scratch3[iq] = alpha * (G2 * val_x + G4 * val_y + G5 * val_z);
+    }
+  }
+  __syncthreads();
+
+  // ---- phase 2: accumulate gradients back to DOFs (stride over nd) ----
+  if (active) {
+    for (int id = tx; id < nd; id += stride) {
+      T grad_x = 0.0, grad_y = 0.0, grad_z = 0.0;
+      for (int iq = 0; iq < nq; ++iq) {
+        grad_x += dphix(iq, id) * scratch1[iq];
+        grad_y += dphiy(iq, id) * scratch2[iq];
+        grad_z += dphiz(iq, id) * scratch3[iq];
+      }
+      const T yd = grad_x + grad_y + grad_z;
+      const int gdof = dofmap[cell_idx * nd + id];
+      atomicAdd(&out_dofs[gdof], global_coefficient * yd);
+    }
+  }
+}
+
 template <typename T, int nd, int nq>
 __global__ void stiffness_operator3D_optimem(
     T *__restrict__ out_dofs, const T *__restrict__ in_dofs,

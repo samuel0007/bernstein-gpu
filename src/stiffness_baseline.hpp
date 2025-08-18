@@ -180,6 +180,17 @@ public:
     // Copy only derivatives
     dphi_d_span = copy_to_device(dphi.begin() + dphi.size() / (tdim + 1),
                                  dphi.end(), dphi_d, "dphi");
+    // dphix_d_span = copy_to_device(dphi.begin() + dphi.size() / (tdim + 1),
+    //                               dphi.begin() + 2 * dphi.size() / (tdim +
+    //                               1), dphix_d, "dphix");
+    // dphiy_d_span = copy_to_device(dphi.begin() + 2 * dphi.size() / (tdim +
+    // 1),
+    //                               dphi.begin() + 3 * dphi.size() / (tdim +
+    //                               1), dphiy_d, "dphiy");
+    // dphiz_d_span = copy_to_device(dphi.begin() + 3 * dphi.size() / (tdim +
+    // 1),
+    //                               dphi.begin() + 4 * dphi.size() / (tdim +
+    //                               1), dphiz_d, "dphiz");
     std::cout << std::format("Table size = {}, dxnqxnd: {}x{}x{}",
                              dphi.size() - dphi.size() / (tdim + 1),
                              shape[0] - 1, shape[1], shape[2])
@@ -195,9 +206,20 @@ public:
 
   template <typename Vector>
   void operator()(Vector &in, Vector &out, U global_coefficient = 1.,
-                  cudaStream_t stream = 0., int bs = nq,
+                  cudaStream_t stream = 0, int bs = nq,
                   int cells_per_block = 1) {
     in.scatter_fwd();
+
+    std::map<int, int> optimal_stiffness_block_size_x = {
+        {2, 16}, {3, 24}, {4, 16}, {5, 16}, {6, 16}, {7, 16}, {8, 16}};
+    // std::map<int, int> optimal_stiffness_block_size_y = {
+    //     {2, 2}, {3, 4}, {4, 32}, {5, 15}, {6, 16}, {7, 4}, {8, 2}};
+
+         std::map<int, int> optimal_stiffness_block_size_y = {
+        {2, 2}, {3, 4}, {4, 16}, {5, 15}, {6, 8}, {7, 4}, {8, 2}};
+
+    bs = optimal_stiffness_block_size_x[P];
+    cells_per_block = optimal_stiffness_block_size_y[P];
 
     const T *in_dofs = in.array().data();
     T *out_dofs = out.mutable_array().data();
@@ -208,17 +230,26 @@ public:
     // dim3 block_size(nq);
 
     dim3 block_size(bs, cells_per_block);
-    dim3 grid_size((this->number_of_local_cells + cells_per_block - 1) / cells_per_block);
+    dim3 grid_size((this->number_of_local_cells + cells_per_block - 1) /
+                   cells_per_block);
 
-    // size_t shmem = sizeof(T) * (nd + 3 * nq) * cells_per_block;
-    size_t shmem = sizeof(T) * ( (nd + 3*nq) * cells_per_block + 3*nd*nq );
+    size_t shmem = sizeof(T) * (nd + 3 * nq) * cells_per_block;
+    // size_t shmem = sizeof(T) * ( (nd + 3*nq) * cells_per_block + 3*nd*nq );
 
-
-    kernels::stiffness::stiffness_operator3D_optimem<T, nd, nq>
+    kernels::stiffness::stiffness_operator3D_opti<T, nd, nq>
         <<<grid_size, block_size, shmem, stream>>>(
             out_dofs, in_dofs, this->alpha_d_span.data(),
             this->geom_d_span.data(), this->dofmap_d_span.data(),
-            this->dphi_d_span.data(), global_coefficient, this->number_of_local_cells);
+            this->dphi_d_span.data(), global_coefficient,
+            this->number_of_local_cells);
+
+    // kernels::stiffness::stiffness_operator3D_opti_aligned<T, nd, nq>
+    //     <<<grid_size, block_size, shmem, stream>>>(
+    //         out_dofs, in_dofs, this->alpha_d_span.data(),
+    //         this->geom_d_span.data(), this->dofmap_d_span.data(),
+    //         this->dphix_d_span.data(), this->dphiy_d_span.data(),
+    //         this->dphiz_d_span.data(), global_coefficient,
+    //         this->number_of_local_cells);
     // check_device_last_error();
   }
 
@@ -262,6 +293,15 @@ private:
 
   thrust::device_vector<T> dphi_d;
   std::span<const T> dphi_d_span;
+
+  // thrust::device_vector<T> dphix_d;
+  // std::span<const T> dphix_d_span;
+
+  // thrust::device_vector<T> dphiy_d;
+  // std::span<const T> dphiy_d_span;
+
+  // thrust::device_vector<T> dphiz_d;
+  // std::span<const T> dphiz_d_span;
 
   thrust::device_vector<T> alpha_d;
   std::span<const T> alpha_d_span;

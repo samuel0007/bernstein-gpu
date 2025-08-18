@@ -2,7 +2,6 @@
 EXPERIMENT=FR_CG_RTX
 s=float32
 
-# per‑p optimal configs (edit these)
 bs_for_p() {
     case "$1" in
         2)  echo 16 ;;
