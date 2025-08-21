@@ -424,6 +424,7 @@ namespace freefus
     using NonlinearMassAction = NonlinearMassAction<T, U, P, Q, D>;
     using StiffnessAction = StiffnessAction<T, U, P, Q, D>;
     using ExteriorMassAction = ExteriorMassAction<T, U, P, Q, D>;
+    using NewmarkAction = NewmarkAction<T, U, P, Q, D>;
 
   public:
     /// @brief TODO this is not very dry. We could split "operator provider" and
@@ -477,6 +478,7 @@ namespace freefus
       Mpdot_action_ptr = std::make_unique<NonlinearMassAction>(mesh, V, alpha_Mp);
       Mpdotdot_action_ptr = std::make_unique<NonlinearMassAction>(mesh, V, alpha_Mp);
 
+      Newmark_action_ptr = std::make_unique<NewmarkAction>(mesh, V, alpha_M, alpha_C, alpha_K);
       M_action_ptr = std::make_unique<MassAction>(mesh, V, alpha_M);
       Mgamma_action_ptr = std::make_unique<ExteriorMassAction>(
           mesh, V, facet_domains[1], alpha_Mgamma);
@@ -526,11 +528,9 @@ namespace freefus
       PROF_GPU_SCOPE("JACOBIAN", 7, 0);
       out.set(0.);
       // Linear Jacobian
-      (*M_action_ptr)(in, out);
+      (*Newmark_action_ptr)(in, out, m_dt);
       (*Mgamma_action_ptr)(in, out);
-      (*C_action_ptr)(in, out, gamma *m_dt);
       (*Cgamma_action_ptr)(in, out, gamma *m_dt);
-      (*K_action_ptr)(in, out, beta *m_dt *m_dt);
       // Nonlinear part
       (*Mp_action_ptr)(in, out);
       (*Mpdot_action_ptr)(in, out, 2 * gamma * m_dt);
@@ -546,11 +546,9 @@ namespace freefus
     {
       PROF_GPU_SCOPE("PC", 7, 0);
       diag_inv.set(0.);
-      M_action_ptr->get_diag(diag_inv);
+      Newmark_action_ptr->get_diag(diag_inv, m_dt);
       Mgamma_action_ptr->get_diag(diag_inv);
-      C_action_ptr->get_diag(diag_inv, gamma * m_dt);
       Cgamma_action_ptr->get_diag(diag_inv, gamma * m_dt);
-      K_action_ptr->get_diag(diag_inv, beta * m_dt * m_dt);
 
       Mp_action_ptr->get_diag(diag_inv);
       Mpdot_action_ptr->get_diag(diag_inv, 2 * gamma * m_dt);
@@ -580,7 +578,7 @@ namespace freefus
     std::unique_ptr<NonlinearMassAction> Mpdot_action_ptr;
     std::unique_ptr<NonlinearMassAction> Mpdotdot_action_ptr;
 
-    // std::unique_ptr<MassAction> Mp_jacobian_action_ptr;
+    std::unique_ptr<NewmarkAction> Newmark_action_ptr;
     std::unique_ptr<MassAction> M_action_ptr;
     std::unique_ptr<ExteriorMassAction> Mgamma_action_ptr;
     std::unique_ptr<StiffnessAction> C_action_ptr;
@@ -610,44 +608,46 @@ namespace freefus
     // s = Rcurv - math.sqrt(Rcurv**2 - a**2) # Height of cap
     const U Rcurv = 0.064;
     const U a = 0.032;
+    // const U Rcurv = 0.032;
+    // const U a = 0.0165;
     const U s = Rcurv - std::sqrt(Rcurv * Rcurv - a * a);
     const U TOL = 1e-6;
 
-    // std::vector<std::int32_t> facets1 =
-    //     mesh::locate_entities_boundary(*mesh_data.mesh, 2, [s, a, TOL](auto x)
-    //                                    {
-    //     std::vector<std::int8_t> marker(x.extent(1), false);
-    //     for (std::size_t p = 0; p < x.extent(1); ++p) {
-    //       auto x0 = x(0, p);
-    //       auto y0 = x(1, p);
-    //       auto z0 = x(2, p);
+    std::vector<std::int32_t> facets1 =
+        mesh::locate_entities_boundary(*mesh_data.mesh, 2, [s, a, TOL](auto x)
+                                       {
+        std::vector<std::int8_t> marker(x.extent(1), false);
+        for (std::size_t p = 0; p < x.extent(1); ++p) {
+          auto x0 = x(0, p);
+          auto y0 = x(1, p);
+          auto z0 = x(2, p);
 
-    //       if (z0 < (s + TOL) && (x0 * x0 + y0 * y0) < (a * a + TOL * TOL))
-    //         marker[p] = true;
-    //     }
-    //     return marker; });
+          if (z0 < (s + TOL) && (x0 * x0 + y0 * y0) < (a * a + TOL * TOL))
+            marker[p] = true;
+        }
+        return marker; });
 
-    // std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
-    //     fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
-    //     facets1);
-    // std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
-    // facet_domains.push_back(facet_domain);
+    std::vector<std::int32_t> facet_domain = fem::compute_integration_domains(
+        fem::IntegralType::exterior_facet, *(mesh_data.mesh->topology_mutable()),
+        facets1);
+    std::cout << std::format("Domain {}: {}\n", 1, facet_domain.size() / 2);
+    facet_domains.push_back(facet_domain);
 
-    std::vector<int> ft_unique = {1, 2};
+    std::vector<int> ft_unique = {2};
     const std::vector<std::int32_t> bfacets = mesh::exterior_facet_indices(*(mesh_data.mesh->topology()));
     for (int i = 0; i < ft_unique.size(); ++i)
     {
       int tag = ft_unique[i];
       std::vector<std::int32_t> facets_tags;
-      // if (tag == 2)
-      // {
-      //   facets_tags = bfacets;
-      // }
-      // else
-      // {
-        facets_tags = mesh_data.facet_tags->find(tag);
-        // assert(false && "Parallel facet tags not implemented");
-      // }
+      if (tag == 2)
+      {
+        facets_tags = bfacets;
+      }
+      else
+      {
+        // facets_tags = mesh_data.facet_tags->find(tag);
+        assert(false && "Parallel facet tags not implemented");
+      }
       std::vector<std::int32_t> facet_domain =
           fem::compute_integration_domains(
               fem::IntegralType::exterior_facet,

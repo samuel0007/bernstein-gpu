@@ -106,11 +106,11 @@ namespace dolfinx::acc
 
       std::map<int, int> optimal_newmark_block_size_x = {
           {2, 16}, {3, 24}, {4, 16}, {5, 16}, {6, 16}, {7, 16}, {8, 16}};
-      // std::map<int, int> optimal_newmark_block_size_y = {
-      //     {2, 2}, {3, 4}, {4, 32}, {5, 15}, {6, 16}, {7, 4}, {8, 2}};
-
       std::map<int, int> optimal_newmark_block_size_y = {
-          {2, 2}, {3, 4}, {4, 16}, {5, 15}, {6, 16}, {7, 4}, {8, 2}};
+          {2, 2}, {3, 4}, {4, 32}, {5, 15}, {6, 16}, {7, 4}, {8, 2}};
+
+      // std::map<int, int> optimal_newmark_block_size_y = {
+      //     {2, 2}, {3, 4}, {4, 16}, {5, 15}, {6, 16}, {7, 4}, {8, 2}};
 
       bs = optimal_newmark_block_size_x[P];
       cells_per_block = optimal_newmark_block_size_y[P];

@@ -163,10 +163,11 @@ def generate_single_timestep_plot(i, t, timestep_data, vmin, vmax, field_name, p
     Generates and saves a plot for a single timestep. Designed to be run in a worker process.
     """
     fig, ax = plt.subplots(figsize=(7, 5))
+    data = timestep_data.reshape(plane_info["shape"])
     im = ax.imshow(
-        timestep_data.reshape(plane_info["shape"]),
+        data,
         cmap='seismic', aspect='auto', origin='lower',
-        vmin=vmin, vmax=vmax, extent=plane_info["extent"]
+        vmin=-vmax, vmax=vmax, extent=plane_info["extent"]
     )
     ax.set_xlabel(plane_info["xlabel"])
     ax.set_ylabel(plane_info["ylabel"])
@@ -177,6 +178,14 @@ def generate_single_timestep_plot(i, t, timestep_data, vmin, vmax, field_name, p
     plt.savefig(output_path)
     plt.close(fig)
     print(f"  ...Worker finished plotting timestep {i+1}")
+    
+    # plot line in the middle
+    center_line = data[:, data.shape[1] // 2]
+    plt.plot(center_line, color='k', lw=2)
+    plt.xlim(right=100)
+    
+    plt.tight_layout()
+    plt.savefig(output_dir / f"field_timestep_{i+1:03d}_line.png")
 
 # --- NEW: Manager function for parallel plotting ---
 def plot_timesteps_in_parallel(data_stack, times, field_name, plane_info, output_dir, n_jobs):

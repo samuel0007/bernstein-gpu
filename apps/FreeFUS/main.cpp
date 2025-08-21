@@ -34,8 +34,8 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
 
   // Global Parameters
   static constexpr int P =
-      POLYNOMIAL_DEGREE;          // Polynomial Degree of approximation
-  static constexpr int Q = P + 2; // Quadrature order
+      POLYNOMIAL_DEGREE;      // Polynomial Degree of approximation
+  static constexpr int Q = P; // Quadrature order
   static constexpr mesh::CellType cell_type =
       (D == 2) ? mesh::CellType::triangle : mesh::CellType::tetrahedron;
 
@@ -61,7 +61,7 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
           config.sample_nx, config.sample_nz);
 
   io::VTXWriter<U> fslicedwriter(mesh_data.mesh->comm(), config.output_filepath + "-sliced.bp",
-                           {u_sliced_out}, "bp5");
+                                 {u_sliced_out}, "bp5");
   io::VTXWriter<U> fwriter(mesh_data.mesh->comm(), config.output_filepath + ".bp",
                            {u_out}, "bp5");
 
@@ -78,12 +78,12 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
     freefus::insitu_output_DG(material_coefficients, ascent_runner);
   }
 
-  auto model = freefus::create_model<ModelType::NonLinearLossyImplicit, T, U, P, Q, D>(
+  auto model = freefus::create_model<ModelType::LinearLossyImplicit, T, U, P, Q, D>(
       spaces, material_coefficients, mesh_data, params, config.model_type);
   auto solver = freefus::create_solver<T, U>(V, config);
 
   auto timestepper =
-      freefus::create_timestepper<TimesteppingType::NonlinearNewmark, U, Vector>(
+      freefus::create_timestepper<TimesteppingType::Newmark, U, Vector>(
           V, params, config);
 
   PROF_CPU_START("MESH_GLOBAL_REDUCTION", 3);
@@ -93,7 +93,7 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
   PROF_CPU_STOP("MESH_GLOBAL_REDUCTION");
 
   T current_time = 0.;
-  // Worst case traversal time, with 4+1 added period for buffering of the initial windowing
+  // Worst case traversal time, with added periods for buffering of the initial windowing
   T traversal_time = params.domain_length / sound_speed_min + config.buffer_periods * params.period;
 
   T evo_dt = freefus::compute_dt<T, P>(h_min, sound_speed_min, params.period, config.CFL);
@@ -105,7 +105,7 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
   T sampling_time = params.period * config.sampling_periods;
   int sampling_steps = static_cast<int>(std::ceil(sampling_time / sampling_dt));
   T final_time = evolution_time + sampling_time;
-  int total_teps = evolution_steps + sampling_steps;
+  int total_steps = evolution_steps + sampling_steps;
 
   freefus::check_nyquist<U, P>(params.source_frequency, h_min, h_max, sound_speed_min, sound_speed_max, evo_dt, sampling_dt);
 
@@ -118,9 +118,9 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
 
   auto start = freefus::Clock::now();
 
-  int steps = 1;
+  int steps;
   // This runs the simulation until the end of the domain (for traversal_time)
-  while (current_time < evolution_time && steps < config.max_steps)
+  for (steps = 1; (steps <= evolution_steps) && (steps <= config.max_steps); ++steps)
   {
     const std::string current_timestep_name = std::string("timestep_") + std::to_string(steps);
     PROF_CPU_START(current_timestep_name, 2);
@@ -156,7 +156,6 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
           current_time, steps);
     }
 
-    ++steps;
     if (!(steps % 10))
     {
       freefus::log_progress(steps, evolution_steps, dt, current_time, evolution_time, start);
@@ -184,10 +183,10 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
       timestepper->evolve(model, solver, current_time, dt);
       current_time += dt;
       timestepper->get_solution(solution);
-  
+
       freefus::interpolate_to_slice(solution, u_sliced_out, interpolation_data);
       fslicedwriter.write(current_time);
-      
+
       // u_out->interpolate(*solution);
       // fwriter.write(current_time);
 
@@ -200,25 +199,11 @@ void solver(MPI_Comm comm, const UserConfig<U> &config,
   PROF_CPU_STOP("sampling");
 
   auto stop = freefus::Clock::now();
-  U elapsed = std::chrono::duration<U>(stop - start).count();
-  spdlog::info("Total runtime: {:6.2f}s", elapsed);
-
-  // PROF_CPU_START("finalize", 1);
-
-  // timestepper->get_solution(solution);
-  // u_out->interpolate(*solution);
-  // fwriter.write(current_time);
-  // spdlog::info("File output: wrote solution at time {} (step {})", current_time,
-  //              steps);
-
-  // if (config.insitu) {
-  //   timestepper->get_solution(solution);
-  //   u_out->interpolate(*solution);
-  //   freefus::publish_insitu(u_out, ascent_runner, conduit_mesh, ascent_actions);
-  //   spdlog::info("In-situ output: executed Ascent actions at time {} (step {})",
-  //                current_time, steps);
-  //   ascent_runner.close();
-  // }
+  U sampling_elapsed = std::chrono::duration<U>(stop - sampling_start).count();
+  U total_elapsed = std::chrono::duration<U>(stop - start).count();
+  U evolution_elapsed = total_elapsed - sampling_elapsed;
+  spdlog::info("Evolution:  {:6.2f}s, Sampling:  {:6.2f}s, Total runtime: {:6.2f}s",
+               evolution_elapsed, sampling_elapsed, total_elapsed);
 
   PROF_REPORT();
 }

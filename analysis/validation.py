@@ -140,7 +140,7 @@ if L_val > L_cmp:
 # mask where cmp_ is == 0
 mask_t = ~np.isclose(cmp_t, 0, atol=1e-12)
 # 5 bottom are also masked
-mask_t[:5, :] = False  # Mask last 5 rows (bottom)
+mask_t[:20, :] = False  # Mask last 5 rows (bottom)
 plt.imshow(mask_t, origin="lower", cmap="gray")
 plt.savefig("mask.png")
 
@@ -152,6 +152,8 @@ plt.savefig("mask.png")
 rel_l2_global = np.linalg.norm((cmp_ - val).ravel()) / np.linalg.norm(val.ravel())
 print(f"Global relative L2 error: {rel_l2_global*100:.3f}%")
 
+
+
 # --- Masked Global Relative L2 ---
 val_masked = val_t[mask_t]
 cmp_masked = cmp_t[mask_t]
@@ -159,6 +161,9 @@ num = np.linalg.norm(cmp_masked - val_masked)
 den = np.linalg.norm(val_masked)
 rel_l2_global = num / den if den != 0 else np.inf
 print(f"Masked global relative L2 error (inside dome): {rel_l2_global*100:.3f}%")
+
+mask_t = ~np.isclose(cmp_t, 0, atol=1e-12)
+
 
 # --- Save plots ---
 out_dir = Path(COMPARISON_FOLDER)

@@ -22,22 +22,22 @@ namespace freefus
 
     auto cell_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
         fmesh.read_meshtags(*base_mesh_p, "Cell tags", std::nullopt));
-    auto facet_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
-        fmesh.read_meshtags(*base_mesh_p, "Facet tags", std::nullopt));
+    // auto facet_tags = std::make_shared<mesh::MeshTags<std::int32_t>>(
+    //     fmesh.read_meshtags(*base_mesh_p, "Facet tags", std::nullopt));
     auto mesh_ptr = std::make_shared<mesh::Mesh<U>>(
         ghost_layer_mesh(*base_mesh_p, coord_element, cell_tags));
     mesh_ptr->topology()->create_connectivity(tdim - 1, tdim);
 
     assert(!cell_tags->indices().empty() && "No cell tags found");
-    assert(!facet_tags->indices().empty() && "No facet tags found");
+    // assert(!facet_tags->indices().empty() && "No facet tags found");
 
     auto local_cells = mesh_ptr->topology()->index_map(tdim)->size_local();
     auto ghost_cells = mesh_ptr->topology()->index_map(tdim)->num_ghosts();
     spdlog::info("Cells: local={}, ghost={}, total={}", local_cells, ghost_cells,
                  local_cells + ghost_cells);
 
-    return MeshData<U>{mesh_ptr, cell_tags, facet_tags};
-    // return MeshData<U>{mesh_ptr, cell_tags, nullptr};
+    // return MeshData<U>{mesh_ptr, cell_tags, facet_tags};
+    return MeshData<U>{mesh_ptr, cell_tags, nullptr};
   }
 
   // TODO: move to mainlib source
